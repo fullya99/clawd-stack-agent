@@ -890,12 +890,26 @@ else
   alerte "aucune entree datee dans CHANGELOG.md (formats reconnus : ## AAAA-MM-JJ, ## [x] - AAAA-MM-JJ, [AAAA-MM-JJ] [TYPE])"
 fi
 
-CM_DATE="$(grep -m1 -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' CODEMAP.md 2>/dev/null || true)"
+# La date de la carte : sa ligne de mise a jour, hors du bloc contexte:convention (une date
+# de chemin dans `exceptions:` n'est pas la sienne). Sans cette ligne, la premiere date hors
+# du bloc. Une ligne de piege datee plus haut ne passe devant que dans ce repli.
+CM_DATE=""
+if [ -f CODEMAP.md ]; then
+  CM_HORS_BLOC="$(awk '/<!-- contexte:convention/{b=1} !b{print} b && /-->/{b=0}' CODEMAP.md)"
+  CM_DATE="$(printf '%s\n' "$CM_HORS_BLOC" \
+             | grep -iE '(mise +[^ ]+ +jour|last +updated)' \
+             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed -n '1p' || true)"
+  [ -n "$CM_DATE" ] || CM_DATE="$(printf '%s\n' "$CM_HORS_BLOC" \
+             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed -n '1p' || true)"
+fi
 [ -n "$CM_DATE" ] && info "CODEMAP date du $CM_DATE" || alerte "CODEMAP.md sans date de mise a jour"
 
 if [ -f TODOS.md ]; then
   if grep -qiE "$RE_REPRISE" TODOS.md; then
-    TD_DATE="$(grep -m1 -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' TODOS.md || true)"
+    # La date du bloc, du titre qui contient « reprise » au titre suivant : une date de tete
+    # de fichier ou d'une section plus haute n'est pas celle de l'etat.
+    TD_DATE="$(awk -v re="$RE_BLOC" '/^## /{ if (dans) exit; if (tolower($0) ~ re) dans=1 } dans{print}' TODOS.md \
+               | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed -n '1p' || true)"
     jours_depuis "${TD_DATE:-}"; d="$JOURS"
     if [ -n "$d" ] && [ "$d" -gt 14 ]; then
       alerte "bloc Etat a la reprise date du $TD_DATE, soit $d jours"
@@ -1130,7 +1144,11 @@ FIN3
     rotation=0
     prose="$(printf '%s\n' "$entete" | grep -vE "$RE_ORIGINE|$RE_REMPL" || true)"
     if grep -qiE 'rotation|jugement|volontaire|deliber|intentionn' <<<"$prose"; then rotation=1; fi
-    if [ -n "$orig" ] && [ -e "$orig" ] && [ "$rotation" -eq 0 ]; then
+    # Un resume pose par ctx-rotation.sh --plans (via ctx-archive.sh --resume) porte le
+    # marqueur plan-resume : le vivant est le geste prevu, pas une recreation.
+    resume=0
+    if [ -n "$orig" ] && [ -f "$orig" ] && grep -qF 'plan-resume' "$orig"; then resume=1; fi
+    if [ -n "$orig" ] && [ -e "$orig" ] && [ "$rotation" -eq 0 ] && [ "$resume" -eq 0 ]; then
       alerte "$f : $orig existe aussi en vivant. Un archive recree au meme chemin laisse deux verites en face"
     fi
     # Taille d'un fichier d'archive. Les bots d'archivage de Wikipedia plafonnent
