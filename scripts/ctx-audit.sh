@@ -509,7 +509,7 @@ fiches_atteintes() { # <index> -> un chemin par ligne
         normaliser "$dir/$cible"
         cible="$NORM"
         case "$cible" in *.md) ;; *) continue ;; esac
-        if printf '%s\n' "$tous" | grep -qxF "$cible"; then continue; fi
+        if grep -qxF "$cible" <<<"$tous"; then continue; fi
         tous="$tous
 $cible"
         suivants="${suivants:+$suivants
@@ -547,7 +547,7 @@ claude_renvoi() {
     readlink CLAUDE.md
     return 0
   fi
-  autres="$(grep -vE '^[[:space:]]*(@[^[:space:]]+[[:space:]]*)?$' CLAUDE.md | head -1 || true)"
+  autres="$(grep -m1 -vE '^[[:space:]]*(@[^[:space:]]+[[:space:]]*)?$' CLAUDE.md || true)"
   premier="$(grep -m1 -E '^[[:space:]]*@' CLAUDE.md || true)"
   if [ -z "$autres" ] && [ -n "$premier" ]; then
     premier="${premier#"${premier%%[![:space:]]*}"}"
@@ -568,8 +568,7 @@ secret_factice() { # <ligne de git grep : chemin:ligne:contenu>
     *) return 1 ;;
   esac
   contenu="${1#*:}"; contenu="${contenu#*:}"
-  printf '%s\n' "$contenu" \
-    | grep -qiE 'factice|fake|dummy|example|exemple|placeholder|changeme|redacted|xxxx|0000|(.)\1\1\1\1\1\1'
+  grep -qiE 'factice|fake|dummy|example|exemple|placeholder|changeme|redacted|xxxx|0000|(.)\1\1\1\1\1\1' <<<"$contenu"
 }
 
 # fichiers markdown de doc, hors archives et hors dependances
@@ -608,7 +607,7 @@ bloc_reprise_lignes() { # <TODOS.md> -> nombre de lignes, 0 si absent
 # Section la plus longue d'un markdown, en lignes, avec son titre.
 section_max() { # <fichier> -> "N titre"
   awk '/^## /{ if (t != "") print n, t; t=$0; n=0 } { n++ } END{ if (t != "") print n, t }' "$1" 2>/dev/null \
-    | sort -rn | head -1
+    | sort -rn | sed -n '1p'
 }
 
 # Les entrees d'un journal dans l'ordre du fichier, une ligne "N titre" chacune.
@@ -627,7 +626,7 @@ entrees_du_journal() { # <fichier>
 
 # Entree la plus longue d'un journal, en lignes.
 entree_max() { # <fichier> -> "N titre"
-  entrees_du_journal "$1" | sort -rn | head -1
+  entrees_du_journal "$1" | sort -rn | sed -n '1p'
   return 0
 }
 
@@ -872,8 +871,8 @@ CL_FORMAT="$(journal_detecter CHANGELOG.md)"
 CL_DATE=""
 if [ -f CHANGELOG.md ] && [ -n "$CL_FORMAT" ]; then
   CL_DATE="$(awk '/^[ \t]*```/{c=!c; next} !c' CHANGELOG.md \
-             | grep -m1 -E "$(journal_motif "$CL_FORMAT")" \
-             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true)"
+             | grep -E "$(journal_motif "$CL_FORMAT")" | sed -n '1p' \
+             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sed -n '1p' || true)"
   if [ -n "$(conv_journal_format)" ]; then
     info "journal CHANGELOG.md : format $CL_FORMAT, declare par le bloc"
   else
@@ -925,7 +924,7 @@ if [ "${NB_MODIFS:-0}" -eq 0 ]; then
   ok "rien de modifie"
 else
   info "$NB_MODIFS fichier(s) touche(s)"
-  printf '%s\n' "$MODIFS" | head -15 | sed 's/^/       /'
+  head -15 <<<"$MODIFS" | sed 's/^/       /'
   [ "$NB_MODIFS" -gt 15 ] && printf '       ... et %s de plus\n' "$((NB_MODIFS - 15))"
 fi
 
@@ -975,7 +974,7 @@ if [ -n "$DOCS_DIR" ] && [ -d "$DOCS_DIR" ]; then
         prefixe="${p%%\**}"
         prefixe="${prefixe%/}"
         [ -n "$prefixe" ] || continue
-        if printf '%s\n' "$MODIFS" | grep -q "^$prefixe"; then
+        if grep -q "^$prefixe" <<<"$MODIFS"; then
           alerte "$f : sa portee ($p) a bouge, relire la fiche"
           break
         fi
@@ -1096,7 +1095,8 @@ if [ -n "$ARCH_DIR" ] && [ -d "$ARCH_DIR" ]; then
     if [ -n "$EXCEPTIONS" ] && exception_de archive "$f"; then continue; fi
     # L'en-tete s'ecrit en capitales ou non : une citation en tete qui parle
     # d'archive suffit. Un mot « archive » dans le texte ne compte pas.
-    if ! head -6 "$f" | grep -q 'ARCHIV' && ! head -6 "$f" | grep -qiE '^[[:space:]]*>.*archiv'; then
+    entete6="$(head -6 "$f" || true)"
+    if ! grep -q 'ARCHIV' <<<"$entete6" && ! grep -qiE '^[[:space:]]*>.*archiv' <<<"$entete6"; then
       alerte "$f : pas d'en-tete ARCHIVE"
     fi
     # Index cherche par CHEMIN COMPLET. Par nom de base, un nom present dans la
@@ -1107,7 +1107,7 @@ if [ -n "$ARCH_DIR" ] && [ -d "$ARCH_DIR" ]; then
     entete="$(head -8 "$f")"
     # Le remplacant resout-il encore ? C'est le champ qui fait la valeur de
     # l'en-tete, et il pourrit sans bruit.
-    rempl="$(printf '%s' "$entete" | grep -m1 -E "$RE_REMPL" || true)"
+    rempl="$(grep -m1 -E "$RE_REMPL" <<<"$entete" || true)"
     if [ -n "$rempl" ]; then
       while IFS= read -r cible; do
         case "$cible" in *' '*|*aucun*|*'<'*|*'{{'*|'') continue ;; esac
@@ -1122,14 +1122,14 @@ FIN3
     fi
     # Un vivant au meme chemin que l'origine : deux verites en face, dont une
     # marquee fausse.
-    orig="$(printf '%s' "$entete" | grep -m1 -E "$RE_ORIGINE" | grep -oE '`[^`]+`' | tr -d '`' || true)"
+    orig="$(grep -m1 -E "$RE_ORIGINE" <<<"$entete" | grep -oE '`[^`]+`' | tr -d '`' || true)"
     # Une rotation ou un jugement ecrit en prose dans l'en-tete (recreation voulue) :
     # la coexistence est deja tranchee, l'alerte reviendrait a chaque audit sans rien dire.
     # Les lignes `Origine :` et `Remplace par :` ne comptent pas : elles portent des chemins,
     # et `docs/modules/rotation.md` n'est pas un jugement.
     rotation=0
     prose="$(printf '%s\n' "$entete" | grep -vE "$RE_ORIGINE|$RE_REMPL" || true)"
-    if printf '%s' "$prose" | grep -qiE 'rotation|jugement|volontaire|deliber|intentionn'; then rotation=1; fi
+    if grep -qiE 'rotation|jugement|volontaire|deliber|intentionn' <<<"$prose"; then rotation=1; fi
     if [ -n "$orig" ] && [ -e "$orig" ] && [ "$rotation" -eq 0 ]; then
       alerte "$f : $orig existe aussi en vivant. Un archive recree au meme chemin laisse deux verites en face"
     fi
@@ -1191,9 +1191,9 @@ $SUSPECT
 FIN
 fi
 if [ -n "$FILTRE" ]; then
-  PREMIERS="$(printf '%s' "$FILTRE" | head -5 | cut -d: -f1 | sort -u | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
+  PREMIERS="$(printf '%s' "$FILTRE" | sed -n '1,5p' | cut -d: -f1 | sort -u | tr '\n' ',' | sed 's/,$//; s/,/, /g')"
   alerte "valeurs qui ressemblent a des secrets dans des fichiers trackes : $PREMIERS" "${PREMIERS%%,*}"
-  printf '%s' "$FILTRE" | head -5 | sed 's/^/       /'
+  printf '%s' "$FILTRE" | sed -n '1,5p' | sed 's/^/       /'
 else
   ok "rien de suspect dans les fichiers trackes"
 fi
@@ -1259,7 +1259,7 @@ if [ -n "$CLAUDE_LU" ]; then
   recit="$(md_sans_code "$CLAUDE_LU" | grep -E "$RE_DATE_LIBRE" | grep -iE "$RE_RECIT" || true)"
   nr="$(printf '%s' "$recit" | grep -c . || true)"
   if [ "${nr:-0}" -ge 2 ]; then
-    info "CLAUDE.md : $nr ligne(s) portent une date et un verbe d'etat ou de recit, par exemple « $(printf '%s' "$recit" | head -1 | cut -c1-70) ». L'etat va dans le bloc de reprise de TODOS, le recit au CHANGELOG" CLAUDE.md
+    info "CLAUDE.md : $nr ligne(s) portent une date et un verbe d'etat ou de recit, par exemple « $(head -1 <<<"$recit" | cut -c1-70) ». L'etat va dans le bloc de reprise de TODOS, le recit au CHANGELOG" CLAUDE.md
   fi
 fi
 
@@ -1292,8 +1292,8 @@ consignes_non_bornees() { # <fichier>
   while IFS= read -r l; do
     [ -n "$l" ] || continue
     num="${l%%:*}"; txt="${l#*:}"
-    if printf '%s\n' "$txt" | grep -qiE "$RE_NEG"; then continue; fi
-    if printf '%s\n' "$txt" | grep -qiE "$RE_BORNE"; then continue; fi
+    if grep -qiE "$RE_NEG" <<<"$txt"; then continue; fi
+    if grep -qiE "$RE_BORNE" <<<"$txt"; then continue; fi
     for tok in $(printf '%s\n' "$txt" | grep -oE '[A-Za-z0-9_./-]+\.md' | sort -u || true); do
       tok="${tok#./}"
       case "$txt" in *"$tok#"*) continue ;; esac
@@ -1361,7 +1361,7 @@ journal() { # <fichier> <libelle>
   # append-only, on ne reecrit pas le passe, donc une vieille entree trop longue
   # est une information et pas une alerte. Seules les trois plus recentes sont
   # encore les nôtres a corriger.
-  em="$(entrees_du_journal "$f" | head -3 | sort -rn | head -1)"
+  em="$(entrees_du_journal "$f" | sed -n '1,3p' | sort -rn | sed -n '1p')"
   if [ -n "$em" ] && [ "${em%% *}" -gt 40 ]; then
     alerte "$lib : entree recente de ${em%% *} lignes (${em#* }). Une entree tient en 25 lignes, le detail va dans une fiche"
   else
@@ -1545,7 +1545,7 @@ imports_atteints() { # <fichier>
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       for c in $(imports_de "$f"); do
-        if printf '%s\n' "$tous" | grep -qxF "$c"; then continue; fi
+        if grep -qxF "$c" <<<"$tous"; then continue; fi
         tous="$tous
 $c"
         suivants="${suivants:+$suivants
@@ -1579,7 +1579,7 @@ fi
 if [ -f TODOS.md ]; then c_reprise="$(bloc_reprise_lignes TODOS.md)"; fi
 if [ -f CODEMAP.md ]; then c_carte="$(lignes CODEMAP.md)"; fi
 if [ -f CHANGELOG.md ]; then
-  for n in $(entrees_du_journal CHANGELOG.md | head -3 | awk '{print $1}'); do
+  for n in $(entrees_du_journal CHANGELOG.md | sed -n '1,3p' | awk '{print $1}'); do
     c_journal=$((c_journal + n))
   done
 fi
@@ -1692,7 +1692,7 @@ if [ -n "$DOCS_DIR" ] && [ -f "$DOCS_DIR/README.md" ] && [ -n "$ARCH_DIR" ] && [
   RESUME="$(awk '/^#+ / { dans = ($0 ~ /[Aa]rchiv/); next } dans' "$DOCS_DIR/README.md")"
   nres=0; faux=0
   while IFS= read -r l; do
-    d="$(printf '%s' "$l" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true)"
+    d="$(grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<<"$l" | sed -n '1p' || true)"
     [ -n "$d" ] || continue
     toks="$(printf '%s' "$l" | grep -oE '`[^`]+`' | tr -d '`' || true)"
     [ -n "$toks" ] || continue
@@ -1700,13 +1700,13 @@ if [ -n "$DOCS_DIR" ] && [ -f "$DOCS_DIR/README.md" ] && [ -n "$ARCH_DIR" ] && [
     trouve=0
     while IFS= read -r t; do
       [ -n "$t" ] || continue
-      if grep -F -- "$d" "$ARCH_DIR/README.md" | grep -qF -- "$t"; then trouve=1; fi
+      if [ -n "$(grep -F -- "$d" "$ARCH_DIR/README.md" | grep -F -- "$t" || true)" ]; then trouve=1; fi
     done <<FIN
 $toks
 FIN
     if [ "$trouve" -eq 0 ]; then
       faux=$((faux + 1))
-      alerte "$DOCS_DIR/README.md : la ligne archivee du $d ($(printf '%s' "$toks" | head -1)) ne se retrouve pas dans $ARCH_DIR/README.md. Le resume se recalcule depuis l'index des archives" "$DOCS_DIR/README.md"
+      alerte "$DOCS_DIR/README.md : la ligne archivee du $d ($(head -1 <<<"$toks")) ne se retrouve pas dans $ARCH_DIR/README.md. Le resume se recalcule depuis l'index des archives" "$DOCS_DIR/README.md"
     fi
   done <<FIN
 $RESUME
@@ -1722,8 +1722,8 @@ FIN
       }' "$ARCH_DIR/README.md")"
   if [ -n "$recente" ] && [ "$nres" -gt 0 ]; then
     rd="${recente%%|*}"; ro="${recente#*|}"
-    ro="$(printf '%s' "$ro" | grep -oE '`[^`]+`' | head -1 | tr -d '`' || true)"
-    if [ -n "$ro" ] && ! printf '%s\n' "$RESUME" | grep -qF -- "$ro" && ! printf '%s\n' "$RESUME" | grep -qF -- "$(basename "$ro")"; then
+    ro="$(grep -oE '`[^`]+`' <<<"$ro" | sed -n '1p' | tr -d '`' || true)"
+    if [ -n "$ro" ] && ! grep -qF -- "$ro" <<<"$RESUME" && ! grep -qF -- "$(basename "$ro")" <<<"$RESUME"; then
       info "$DOCS_DIR/README.md : le resume « archive recemment » n'a pas la derniere archive, du $rd ($ro). Le recalculer depuis $ARCH_DIR/README.md" "$DOCS_DIR/README.md"
     fi
   fi
@@ -1772,7 +1772,7 @@ if [ -n "$MEM" ]; then
           case "$BLOB" in *"$seg"*) copie="$seg"; break ;; esac
         fi
       done <<FIN
-$(awk 'NR == 1 && /^---/ { fm = 1; next } fm && /^---/ { fm = 0; next } !fm' "$memdir/$ef" | head -200)
+$(awk 'NR == 1 && /^---/ { fm = 1; next } fm && /^---/ { fm = 0; next } !fm { if (++n <= 200) print }' "$memdir/$ef")
 FIN
       if [ -n "$copie" ]; then
         nrec=$((nrec + 1))
@@ -1818,7 +1818,7 @@ while IFS= read -r p; do
       [ -n "$l" ] || continue
       txt="${l#*:}"; txt="${txt#*:}"
       mot_dans_ligne "$p" "$txt" || continue
-      if printf '%s\n' "$txt" | grep -qiE "$RE_SANS_KIT"; then contre="$l"; break; fi
+      if grep -qiE "$RE_SANS_KIT" <<<"$txt"; then contre="$l"; break; fi
     done <<FIN2
 $(grep -nF -- "$p" CODEMAP.md CLAUDE.md 2>/dev/null || true)
 FIN2
@@ -1826,7 +1826,7 @@ FIN2
       alerte "$p porte son propre kit (CODEMAP, TODOS, CHANGELOG), mais ${contre%%:*} ligne $(printf '%s' "$contre" | cut -d: -f2) dit le contraire. Corriger la carte du parent" "${contre%%:*}"
     fi
   fi
-  sha="$(git ls-tree HEAD -- "$p" 2>/dev/null | awk '$2 == "commit" { print $3; exit }')"
+  sha="$(git ls-tree HEAD -- "$p" 2>/dev/null | awk '$2 == "commit" && !vu { print $3; vu = 1 }')"
   if [ -n "$sha" ] && git -C "$p" cat-file -e "$sha^{commit}" 2>/dev/null; then
     dptr="$(git -C "$p" show -s --format=%ci "$sha" 2>/dev/null | cut -c1-10)"
     dstat="$(git -C "$p" log -1 --format=%ci -- TODOS.md 2>/dev/null | cut -c1-10)"
@@ -1885,7 +1885,7 @@ if [ -d .claude/agents ]; then
     if [ -z "$m" ]; then
       bad=$((bad + 1))
       alerte "$a : pas de model:, l'agent herite du modele de la session principale, souvent Opus. Poser un alias : haiku, sonnet ou opus" "$a"
-    elif printf '%s' "$m" | grep -qiE 'claude-.*[0-9]|anthropic\.claude'; then
+    elif grep -qiE 'claude-.*[0-9]|anthropic\.claude' <<<"$m"; then
       bad=$((bad + 1))
       case "$m" in
         *[Hh]aiku*) al=haiku ;;

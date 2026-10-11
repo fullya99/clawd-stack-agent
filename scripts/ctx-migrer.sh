@@ -232,8 +232,8 @@ MESURE_TAILLE=""
 MESURE_PROFIL=""
 if [ "$V5" -eq 0 ] && [ -f "$SCRIPT_DIR/ctx-init.sh" ]; then
   bash "$SCRIPT_DIR/ctx-init.sh" --root "$ROOT" --dry-run > "$TMP/init.out" 2>/dev/null || true
-  MESURE_TAILLE="$(sed -n 's/^  taille  : \([a-z]*\),.*/\1/p' "$TMP/init.out" | head -n 1)"
-  MESURE_PROFIL="$(sed -n 's/^  profil  : //p' "$TMP/init.out" | head -n 1)"
+  MESURE_TAILLE="$(sed -n 's/^  taille  : \([a-z]*\),.*/\1/p' "$TMP/init.out" | sed -n '1p')"
+  MESURE_PROFIL="$(sed -n 's/^  profil  : //p' "$TMP/init.out" | sed -n '1p')"
 fi
 
 dir_existant() { # <candidats...> : premier repertoire present, avec barre finale
@@ -323,7 +323,7 @@ fichier_du_seuil() { # <NOM_DE_VARIABLE>
 
 entree_deja_declaree() { # <liste a=b, c=d> <nom>
   printf '%s\n' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/=.*//; s/[[:space:]]*$//' \
-    | grep -qxF "$2"
+    | grep -xF "$2" >/dev/null
 }
 
 # Les lignes NOM=nombre dont le nom parle de seuil : SEUIL, MAX_..., LIMITE, BLOCAGE, AJOURN.

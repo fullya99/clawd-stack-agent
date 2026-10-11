@@ -65,7 +65,7 @@ frontmatter() { # <fichier>
 }
 
 valeur_de() { # <frontmatter> <cle>
-  printf '%s\n' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1 | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+  sed -n "s/^$2:[[:space:]]*//p" <<<"$1" | sed -n '1p' | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
 }
 
 controle() { # <fichier>
@@ -89,7 +89,7 @@ controle() { # <fichier>
       *:*)  note FAUX "$f" name "name contient un deux-points, le fichier est rejete au chargement" ;;
       -*)   note FAUX "$f" name "name commence par un tiret, le fichier est rejete au chargement" ;;
       *)
-        if printf '%s' "$nom" | grep -qE '^[a-z][a-z0-9-]*$'; then
+        if grep -qE '^[a-z][a-z0-9-]*$' <<<"$nom"; then
           note VRAI "$f" name "$nom"
         else
           note FAUX "$f" name "\"$nom\" hors convention, minuscules et tirets seulement"
@@ -119,7 +119,7 @@ controle() { # <fichier>
       note VRAI "$f" "$cle" "$val"
     elif [ "$cle" = "model" ]; then
       # Un identifiant complet est admis en plus des alias.
-      if printf '%s' "$val" | grep -qE '^claude-[a-z0-9.-]+$'; then
+      if grep -qE '^claude-[a-z0-9.-]+$' <<<"$val"; then
         note VRAI "$f" model "$val, identifiant complet"
       else
         note FAUX "$f" model "\"$val\" hors liste. Admis : $liste, ou un identifiant claude-*"
@@ -131,7 +131,7 @@ controle() { # <fichier>
 
   val="$(valeur_de "$fm" maxTurns)"
   if [ -n "$val" ]; then
-    if printf '%s' "$val" | grep -qE '^[1-9][0-9]*$'; then
+    if grep -qE '^[1-9][0-9]*$' <<<"$val"; then
       note VRAI "$f" maxTurns "$val"
     else
       note FAUX "$f" maxTurns "\"$val\" n'est pas un entier positif"

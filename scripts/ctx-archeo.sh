@@ -58,7 +58,7 @@ ARCHIVES="$(grep -m1 '^archives:' CODEMAP.md 2>/dev/null | sed 's/^archives: *//
 provenance() { # <fichier>
   local f="$1" tete
   tete="$(head -8 "$f" | grep '^>' || true)"
-  if printf '%s' "$tete" | grep -q 'rotation'; then
+  if grep -q 'rotation' <<<"$tete"; then
     printf '  nature   : FROID, encore vrai a sa date, sorti du journal courant\n'
   elif [ -n "$tete" ]; then
     printf '  nature   : FAUX ou PERIME, ne pas s en servir pour agir\n'
@@ -151,7 +151,7 @@ for f in $FICHIERS; do
   # Les lignes sont tronquees a 200 caracteres. Une ligne de doc peut etre tres
   # longue, et le but est de situer, pas de tout rapatrier.
   LIMITE=$(( (MAX - MONTRES) * (2 * CONTEXTE + 1) ))
-  grep -n -C "$CONTEXTE" -- "$MOTIF" "$f" 2>/dev/null | head -n "$LIMITE" \
+  grep -n -C "$CONTEXTE" -- "$MOTIF" "$f" 2>/dev/null | sed -n "1,${LIMITE}p" \
     | cut -c1-200 | sed 's/^/  /' || true
   if [ "$nb" -gt $(( MAX - MONTRES )) ]; then
     RESTE=$(( RESTE + nb - (MAX - MONTRES) ))

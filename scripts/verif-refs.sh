@@ -51,7 +51,7 @@ est_gabarit() { # <jeton>
     http://*|https://*|mailto:*|'#'*)       return 0 ;;
   esac
   # /clear, /compact, /planifier : une commande slash n'est pas un chemin absolu.
-  printf '%s' "$1" | grep -qE '^/[a-z][a-z0-9-]*$' && return 0
+  grep -qE '^/[a-z][a-z0-9-]*$' <<<"$1" && return 0
   case "$1" in
     *) return 1 ;;
   esac
@@ -63,13 +63,13 @@ ressemble_a_un_chemin() { # <jeton>
   case "$1" in
     */*)                                             return 0 ;;
     Makefile|Dockerfile|justfile|Procfile|LICENSE)   return 0 ;;
-    *.*) printf '%s' "$1" | grep -qE '^[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,6}$' && return 0 ;;
+    *.*) grep -qE '^[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,6}$' <<<"$1" && return 0 ;;
   esac
   return 1
 }
 
 cherche_ailleurs() { # <nom>
-  find "$RACINE" -name "$1" -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | head -1
+  find "$RACINE" -name "$1" -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null | sed -n '1p'
 }
 
 verif_chemin() { # <ligne> <jeton>
@@ -214,7 +214,7 @@ verif_commande() { # <ligne> <commande complete>
 # --- lecture du markdown -----------------------------------------------------
 
 est_une_commande() { # <jeton>
-  printf '%s' "$1" | grep -qE '^(npm|pnpm|yarn|bun|make|just|poetry|uv|pipenv|hatch|tox|pytest|ruff|mypy|cargo|go|bash|sh|python3?|node|docker|git|gh|terraform|kubectl) '
+  grep -qE '^(npm|pnpm|yarn|bun|make|just|poetry|uv|pipenv|hatch|tox|pytest|ruff|mypy|cargo|go|bash|sh|python3?|node|docker|git|gh|terraform|kubectl) ' <<<"$1"
 }
 
 lire() { # <fichier>

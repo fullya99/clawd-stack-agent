@@ -149,12 +149,12 @@ elif [ "${NB_LIENS:-0}" -gt 0 ]; then
 fi
 if [ "${NB_CHEMIN:-0}" -gt 0 ]; then
   echo "  chemin cite ($NB_CHEMIN), a classer une par une :"
-  printf '%s\n' "$REFS_CHEMIN" | head -20 | cut -c1-160 | sed 's/^/       /'
+  sed -n '1,20p' <<<"$REFS_CHEMIN" | cut -c1-160 | sed 's/^/       /'
   [ "$NB_CHEMIN" -gt 20 ] && printf '       ... et %s de plus\n' "$((NB_CHEMIN - 20))"
 fi
 if [ "${NB_BASE:-0}" -gt 0 ]; then
   echo "  nom seul cite ($NB_BASE), souvent du contexte historique :"
-  printf '%s\n' "$REFS_BASE" | head -10 | cut -c1-160 | sed 's/^/       /'
+  sed -n '1,10p' <<<"$REFS_BASE" | cut -c1-160 | sed 's/^/       /'
   [ "$NB_BASE" -gt 10 ] && printf '       ... et %s de plus\n' "$((NB_BASE - 10))"
 fi
 [ "${NB_CHEMIN:-0}" -eq 0 ] && [ "${NB_BASE:-0}" -eq 0 ] \
@@ -346,7 +346,7 @@ RESTE="$(chercher "$CIBLE" | grep -v "^$DEST:" || true)"
 NB_RESTE="$(printf '%s\n' "$RESTE" | grep -c . || true)"
 if [ "${NB_RESTE:-0}" -gt 0 ]; then
   echo "  [!] $NB_RESTE occurrence(s) de l'ancien chemin hors des archives :"
-  printf '%s\n' "$RESTE" | head -15 | cut -c1-160 | sed 's/^/       /'
+  sed -n '1,15p' <<<"$RESTE" | cut -c1-160 | sed 's/^/       /'
   echo
   echo "=============================================="
   echo " Archivage INCOMPLET. Le fichier est deplace, son en-tete et sa ligne"

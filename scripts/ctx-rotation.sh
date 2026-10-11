@@ -116,7 +116,7 @@ plan_execute() { # <fichier>
   local f="$1" l
   l="$(head -n 30 "$f" \
        | grep -Ei '((statut|status|etat|état)[^a-z]*:.*(termin|ex.{1,2}cut|clos|done|complet)|plan (ex.{1,2}cut|termin))' \
-       | grep -Eiv '(^|[^a-z])(non|pas|en cours|partiel)([^a-z]|$)' | head -n 1 || true)"
+       | grep -Eiv '(^|[^a-z])(non|pas|en cours|partiel)([^a-z]|$)' | sed -n '1p' || true)"
   if [ -n "$l" ]; then
     printf 'marque dans l'"'"'en-tete\n'
     return 0
@@ -125,7 +125,7 @@ plan_execute() { # <fichier>
     l="$(grep -F -- "$f" TODOS.md \
          | grep -Ei 'termin|ex.{1,2}cut|clos|done|\[x\]' \
          | grep -Fv '[ ]' \
-         | grep -Eiv '(^|[^a-z])(non|pas|en cours|partiel)([^a-z]|$)' | head -n 1 || true)"
+         | grep -Eiv '(^|[^a-z])(non|pas|en cours|partiel)([^a-z]|$)' | sed -n '1p' || true)"
     if [ -n "$l" ]; then
       printf 'declare termine dans TODOS.md\n'
       return 0
@@ -223,7 +223,7 @@ plan_commits() { # <fichier>
 plan_resume() { # <fichier> <sortie> <cases ouvertes>
   local f="$1" out="$2" ouvertes="$3" titre obj nb_e nb_c reste ec cc bloc_fixe
   titre="$(plan_titre "$f" "$(basename "$f" .md)")"
-  obj="$(plan_objectif "$f" | head -n 1)"
+  obj="$(plan_objectif "$f" | sed -n '1p')"
   plan_ecarts "$f" long > "$TMP/ecarts"
   plan_commits "$f" > "$TMP/commits"
   nb_e="$(wc -l < "$TMP/ecarts" | tr -d ' ')"
@@ -536,7 +536,7 @@ for m in $MOIS; do
     mkdir -p "$DEST_DIR"
     if [ "$mode" = "ajout" ]; then
       # en-tete conserve, entrees neuves d'abord, puis les anciennes
-      tete="$(grep -nxF -- "$SENTINELLE" "$dest" | head -n 1 | cut -d: -f1 || true)"
+      tete="$(grep -nxF -- "$SENTINELLE" "$dest" | sed -n '1p' | cut -d: -f1 || true)"
       if [ -z "$tete" ]; then
         tete="$(awk '/^>/ || /^[ \t]*$/ { n++; next } { exit } END { print n + 0 }' "$dest")"
       fi

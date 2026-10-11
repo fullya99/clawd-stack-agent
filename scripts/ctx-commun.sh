@@ -94,10 +94,10 @@ conv_trouver() {
 conv_lire() { # <cle>
   local cle="$1"
   _conv_bloc | awk -v k="$cle" '
-    index($0, k ":") == 1 {
+    !vu && index($0, k ":") == 1 {
       v = substr($0, length(k) + 2)
       sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
-      print v; exit
+      print v; vu = 1
     }'
   return 0
 }
