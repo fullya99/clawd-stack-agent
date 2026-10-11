@@ -3,7 +3,7 @@ name: clawd-stack-agent
 description: "Tient la documentation de contexte d'un projet vraie et courte d'une session à l'autre, quel que soit son type ou sa taille, pour Hermes Agent, OpenClaw et Codex. Six modes : init installe la convention, planifier écrit un plan sourcé qui porte sa propre reprise, cloture range la session avant un redémarrage de contexte, relance dit où on en était, audit vérifie AGENTS.md et CLAUDE.md contre le code, migrer remet une ancienne convention à jour. Trois piliers CODEMAP.md, TODOS.md et CHANGELOG.md, plus docs/ et archives/, réglés par le bloc contexte:convention, et la mémoire propre à l'agent rangée à chaque clôture. Se déclenche sur : clôture, fin de session, reprends, où on en était, fais un plan, planifie, audite le AGENTS.md, la doc gonfle, TODOS est trop long, archive ce qui est obsolète, doc vivante, migrer la convention. Pas pour rédiger ou corriger un texte, c'est style-redaction."
 license: MIT
 platforms: [linux, macos, windows]
-version: 1.0.0-rc.1
+version: 1.0.0-rc.2
 author: fullya99
 metadata:
   hermes:
