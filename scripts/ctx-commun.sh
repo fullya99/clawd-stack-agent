@@ -497,7 +497,8 @@ exclusions_compter_ignorer() { # <glob>
   n="$( cd "$r" && set -f && {
       motifs=""; ou=""
       for w in $a; do
-        case "$w" in -not|-path) ;; *) motifs="$motifs${ou:+ -o }-path $w"; ou=1 ;; esac
+        # (motif) avec parenthese ouvrante : bash 3.2 ferme sinon le $( au premier motif) du case.
+        case "$w" in (-not|-path) ;; (*) motifs="$motifs${ou:+ -o }-path $w"; ou=1 ;; esac
       done
       find . $(_excl_prune_args $CTX_EXCL_BASE) -o -type f \( $motifs \) -print 2>/dev/null | wc -l | tr -d ' '
     } )"
