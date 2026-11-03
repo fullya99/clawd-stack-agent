@@ -78,6 +78,15 @@ ne s'écrit plus, l'audit la calcule en nombre de fichiers hors dépendances : p
 moyenne jusqu'à 600, grande au-delà. Les autres clés (seuils, journal, exceptions) et leurs
 défauts sont dans `references/CONFIG-PROJET.md`.
 
+**Ce que la stack parcourt.** La gestion de contexte ne s'arrête jamais à ce que git suit : un
+fichier gitignoré (notes locales, `context-input/`, livrables, `CLAUDE.local.md`) reste du
+contexte, la liste des fichiers ne vient donc jamais de `git ls-files` et rien n'est exclu parce
+que le `.gitignore` l'exclut. Seul le généré lourd s'élague, reconnu à sa nature : une liste fixe
+de dossiers, les dossiers qui portent un `CACHEDIR.TAG`, les dossiers d'un moteur de jeu quand son
+marqueur existe, à la racine ou jusqu'à trois niveaux plus bas. Tout élagage est nommé par l'audit, jamais silencieux. Un fichier
+gitignoré compte donc, mais il ne voyage ni vers un collègue ni vers une autre machine : l'audit
+l'annonce en information. `ignorer:` écarte ce que git suit sans qu'il fasse partie du projet.
+
 Sur une codebase moyenne ou grande, la carte se découpe par zones. Une zone est un répertoire qui
 porte la sienne, `<zone>/CODEMAP.md`. L'état et le journal restent uniques à la racine. Le détail
 est dans `references/ZONES.md`.

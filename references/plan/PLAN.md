@@ -65,24 +65,37 @@ Repris tel quel, sans variation d'un plan à l'autre.
 **Vérification** : <la commande ou l'observation qui dit que la tâche est finie>
 ```
 
-## 3. Ce qui est interdit dans un plan
+Les interfaces se relisent dans les deux sens avant de rendre le plan : tout ce qu'une tâche
+consomme est produit par une tâche antérieure ou existe déjà (chemin vérifié), et tout ce qu'une
+tâche produit est consommé par une suite ou par le cas de validation. Une production que rien ne
+consomme est une tâche orpheline, elle atteint son critère de fin sans servir à rien.
+
+## 3. Niveau de preuve
+
+Toute affirmation sur le comportement d'un outil, d'une API ou d'un service dit son niveau, dans
+la phrase même : `prouvé le AAAA-MM-JJ par <commande>`, `doc de première main <lien>`, ou
+`déduit, à prouver avant la tâche N`. Dans un tableau, le niveau va dans une colonne de chaque
+ligne, jamais dans un « vérifié » global en tête du tableau : un chiffre non mesuré placé sous un
+chapeau « vérifié » finit recopié ailleurs comme un fait.
+
+## 4. Ce qui est interdit dans un plan
 
 « TBD », « TODO », « à voir », « ajouter la validation appropriée », un chemin inventé, une
 fonction dont on n'a pas vérifié l'existence, une étape sans critère de vérification. Chacun de
 ces cas rend le plan inexécutable par quelqu'un d'autre, et c'est justement le but du plan : que
 la session d'exécution n'ait rien à deviner.
 
-## 4. Sections que le type ajoute
+## 5. Sections que le type ajoute
 
 Selon le type retenu en phase 0, `TYPES-DE-PLAN.md` liste des sections en plus de l'ossature
 commune. Ce fichier ne les redit pas, il renvoie à la table.
 
-## 5. Emplacement et nommage
+## 6. Emplacement et nommage
 
 `plans/<slug>.md` à la racine du projet, slug en minuscules et tirets, descriptif. Si le projet a
 déjà un endroit où il range ses plans, on l'utilise à sa place.
 
-## 6. Quand ne pas écrire de plan
+## 7. Quand ne pas écrire de plan
 
 La tâche tient en deux étapes et trois fichiers, ou le projet a déjà un suivi qui ferait
 l'affaire (`TODOS.md`, une issue, un board). Le dire à l'opérateur et proposer l'alternative

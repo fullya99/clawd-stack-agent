@@ -53,27 +53,70 @@ DATE="$(ctx_aujourdhui)"
 PROJECT_NAME="$(basename "$ROOT")"
 
 # --- detection du profil ------------------------------------------------------
+# Une entree de la racine, a la casse pres. Sur un systeme de fichiers insensible a la casse
+# (macOS par defaut), `[ -d packages ]` repond oui pour le Packages/ d'un projet Unity.
+a_entree() { # <racine> <nom>
+  # Le glob rend les noms tels qu'ecrits sur le disque, la comparaison se fait donc a la casse pres.
+  local e
+  for e in "$1"/* "$1"/.[!.]*; do
+    [ "${e##*/}" = "$2" ] && return 0
+  done
+  return 1
+}
+
+# Au moins un fichier de la racine qui suit le motif (glob shell).
+a_motif() { # <racine> <motif>
+  local f
+  for f in "$1"/$2; do [ -e "$f" ] && return 0; done
+  return 1
+}
+
+# L'ordre compte : du plus specifique au plus general. Un moteur de jeu ou une app mobile
+# porte aussi un package.json ou un Cargo.toml, ils passent donc avant app et monorepo.
 detect_profil() {
   local r="$1"
-  if [ -f "$r/pnpm-workspace.yaml" ] || [ -f "$r/turbo.json" ] || [ -f "$r/go.work" ] \
-     || [ -d "$r/packages" ] || [ -d "$r/apps" ]; then
-    echo monorepo; return
-  fi
-  if [ -f "$r/SKILL.md" ] || [ -d "$r/.claude/skills" ] || [ -f "$r/plugin.json" ]; then
+  if a_motif "$r" '.claude-plugin/plugin.json' || [ -f "$r/SKILL.md" ] || [ -d "$r/.claude/skills" ] \
+     || [ -f "$r/plugin.json" ] || a_motif "$r" 'skills/*/SKILL.md'; then
     echo outillage-agent; return
   fi
-  if [ -d "$r/terraform" ] || [ -d "$r/ansible" ] || [ -d "$r/k8s" ] \
-     || ls "$r"/*.tf >/dev/null 2>&1; then
+  if [ -f "$r/ProjectSettings/ProjectVersion.txt" ] || [ -f "$r/project.godot" ] \
+     || a_motif "$r" '*.uproject'; then
+    echo jeu; return
+  fi
+  if [ -f "$r/pubspec.yaml" ] || { a_entree "$r" android && a_entree "$r" ios; } \
+     || a_motif "$r" '*.xcodeproj' || [ -f "$r/app/src/main/AndroidManifest.xml" ]; then
+    echo mobile; return
+  fi
+  if [ -f "$r/pnpm-workspace.yaml" ] || [ -f "$r/turbo.json" ] || [ -f "$r/go.work" ] \
+     || [ -f "$r/nx.json" ] || [ -f "$r/lerna.json" ] || a_entree "$r" packages || a_entree "$r" apps; then
+    echo monorepo; return
+  fi
+  if [ -d "$r/src-tauri" ] || { [ -f "$r/package.json" ] && grep -q '"electron"' "$r/package.json" 2>/dev/null; }; then
+    echo desktop; return
+  fi
+  if a_entree "$r" terraform || a_entree "$r" ansible || a_entree "$r" k8s \
+     || a_motif "$r" '*.tf' || [ -f "$r/Chart.yaml" ]; then
     echo infra; return
   fi
-  if [ -d "$r/notebooks" ] || [ -d "$r/models" ] || [ -f "$r/dvc.yaml" ]; then
+  if a_entree "$r" notebooks || [ -f "$r/dvc.yaml" ] || a_motif "$r" '*.ipynb'; then
     echo data; return
   fi
+  # Une bibliotheque : un point d'entree de lib sans programme, ou un package qui exporte
+  # sans se lancer.
+  if { [ -f "$r/Cargo.toml" ] && [ -f "$r/src/lib.rs" ] && [ ! -f "$r/src/main.rs" ]; } \
+     || { [ -f "$r/package.json" ] && grep -qE '"(exports|types)"[[:space:]]*:' "$r/package.json" 2>/dev/null \
+          && ! grep -qE '"(start|dev)"[[:space:]]*:' "$r/package.json" 2>/dev/null; }; then
+    echo lib; return
+  fi
   if [ -f "$r/package.json" ] || [ -f "$r/pyproject.toml" ] || [ -f "$r/go.mod" ] \
-     || [ -f "$r/Cargo.toml" ] || [ -f "$r/manage.py" ] || [ -f "$r/pom.xml" ]; then
+     || [ -f "$r/Cargo.toml" ] || [ -f "$r/manage.py" ] || [ -f "$r/pom.xml" ] \
+     || [ -f "$r/build.gradle" ] || [ -f "$r/build.gradle.kts" ] || [ -f "$r/composer.json" ] \
+     || [ -f "$r/Gemfile" ] || [ -f "$r/mix.exs" ] || [ -f "$r/Package.swift" ] \
+     || [ -f "$r/deno.json" ] || [ -f "$r/CMakeLists.txt" ] || a_motif "$r" '*.sln' \
+     || a_motif "$r" '*.csproj' || [ -f "$r/requirements.txt" ]; then
     echo app; return
   fi
-  if [ -d "$r/content" ] || [ -d "$r/posts" ]; then
+  if a_entree "$r" content || a_entree "$r" posts; then
     echo contenu; return
   fi
   echo non-technique
@@ -83,14 +126,18 @@ detect_profil() {
 # Les memes exclusions que ctx-audit.sh, les deux doivent compter pareil.
 detect_taille() {
   local r="$1" n
-  # set -f : exclusions_find rend des motifs que le shell ne doit pas developper
-  n="$(cd "$r" && set -f && find . -type f $(exclusions_find) 2>/dev/null | wc -l | tr -d ' ')"
+  # set -f : exclusions_prune rend des motifs que le shell ne doit pas developper. En elagage,
+  # find ne descend pas dans un Library/ de moteur ou un node_modules.
+  n="$(cd "$r" && set -f && find . $(exclusions_prune) -o -type f -print 2>/dev/null | wc -l | tr -d ' ')"
   if   [ "$n" -lt 150 ]; then echo "petite $n"
   elif [ "$n" -le 600 ]; then echo "moyenne $n"
   else echo "grande $n"; fi
 }
 
 [ -n "$PROFIL" ] || PROFIL="$(detect_profil "$ROOT")"
+# La liste d'elagage se calcule une fois pour la racine visee, la taille et la ligne
+# « elagage » plus bas la relisent en memoire.
+CTX_RACINE="$ROOT" exclusions_charger
 TAILLE_ET_NB="$(detect_taille "$ROOT")"
 TAILLE="${TAILLE_ET_NB%% *}"
 NB_FICHIERS="${TAILLE_ET_NB#* }"
@@ -212,6 +259,14 @@ echo "  racine  : $ROOT"
 echo "  projet  : $PROJECT_NAME"
 echo "  profil  : $PROFIL"
 echo "  taille  : $TAILLE, $NB_FICHIERS fichiers hors dependances"
+# Un elagage se nomme : ce qui ne compte pas dans la taille ci-dessus, au-dela de la liste fixe.
+EL_NOMS="$(exclusions_noms_groupes | awk -F'\t' '
+  $1 == "plafond" { p = $3 " racine(s) de moteur au-dela du plafond de 20"; next }
+  { k = $1 ($2 != "-" && $2 != "." ? " (" $2 "/)" : "")
+    if (!(k in l)) { o[++n] = k; l[k] = $3 } else l[k] = l[k] ", " $3 }
+  END { for (i = 1; i <= n; i++) printf "%s%s %s", (i > 1 ? " ; " : ""), o[i], l[o[i]]
+        if (p != "") printf "%s%s", (n > 0 ? " ; " : ""), p }')"
+[ -z "$EL_NOMS" ] || echo "  elagage : $EL_NOMS"
 [ "$DRY" -eq 1 ] && echo "  mode    : simulation, rien ne sera ecrit"
 echo
 

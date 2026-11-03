@@ -32,7 +32,9 @@ l'orchestrateur reprend la main. Un modèle plus lourd en sous-agent se demande 
 n'est jamais le défaut.
 
 Une sortie d'`explorateur` ou de `controleur` se recoupe avant d'agir : on exige des chemins et des
-chiffres, on relance un `grep` ou un `wc` sur ce qui engage la suite.
+chiffres, on relance un `grep` ou un `wc` sur ce qui engage la suite. Un rôle bon marché qui
+enchaîne les tours sur une tâche à plusieurs étapes finit par coûter plus qu'un cran au-dessus :
+le poids léger pour un contrat fermé (trouver, compter, lancer), pas pour une enquête.
 
 ## Le brief
 
@@ -43,6 +45,27 @@ déjà prises. Tout ce qu'il doit savoir passe dans le brief, en quatre élémen
 2. Les chemins exacts : fichiers à lire, fichiers à écrire.
 3. Le critère de fin : une commande qui passe, ou un fait observable.
 4. La consigne « vise court ».
+
+Un fait que l'orchestrateur a mesuré passe dans le brief avec sa commande et sa date. Sans elles,
+il s'écrit « rapporté » et le rôle le revérifie avant de bâtir dessus.
+
+**Le paquet du relecteur.** Un `git diff` nu ne montre ni les fichiers neufs ni l'état de l'index.
+L'orchestrateur prépare le paquet hors du dépôt et le donne par son chemin :
+
+```bash
+P=<dossier temporaire>/revue; mkdir -p "$P"
+git status --porcelain > "$P/etat.txt"
+git diff HEAD > "$P/diff.patch"
+# diff --no-index rend 1 des qu'il y a une difference, donc xargs rend 123 sur un paquet correct :
+# ce code ne juge rien, on compte les fichiers du paquet contre etat.txt.
+git ls-files --others --exclude-standard -z | xargs -0 -r -I{} git diff --no-index /dev/null {} >> "$P/diff.patch"
+git status --porcelain | cksum > "$P/empreinte.txt"   # l'arbre ne bouge plus pendant la revue
+split -b 60000 "$P/diff.patch" "$P/tranche-"           # une lecture plafonne vers 25 000 tokens
+```
+
+Le brief nomme les invariants du projet à vérifier en premier (secrets, écritures distantes,
+codes de retour, ce que `AGENTS.md` ou `CLAUDE.md` interdit), avant la correction générale. À la
+fin, l'empreinte se recalcule : si elle a changé, la revue a porté sur un autre arbre et se rejoue.
 
 Le rapport revient en trois lignes, puis le détail demandé :
 
@@ -59,6 +82,8 @@ Surpris : <ce que le brief ne prévoyait pas>
 - Un agent ne lance pas d'agent.
 - Un agent ne commite pas et ne pousse pas.
 - Au-delà d'environ 200 appels d'outils, un agent s'arrête avec un point d'étape.
+- Un agent qui écrit passe par les outils d'édition de la plateforme, jamais par un heredoc ou un
+  `sed -i` en shell.
 
 ## Sans sous-agents
 

@@ -79,7 +79,9 @@ Un sous-agent ne renvoie que son résultat final, le pilote ne voit jamais son f
 prompt demande donc à chaque implémenteur de terminer par un état court, trois lignes : ce qui
 est fait, ce qui reste, ce qui a surpris. Sans cette consigne le pilote enchaîne les lots à
 l'aveugle. Il leur demande aussi de mettre à jour la section Reprise du plan et de cocher les
-étapes à la fin de leur lot.
+étapes à la fin de leur lot. Ce sont les deux seules zones du plan qu'un exécutant modifie, et le
+prompt le dit : les décisions, la conception et les critères ne se réécrivent pas en cours de
+route. Un critère qui se révèle faux remonte au pilote, il ne s'assouplit pas pour devenir vert.
 
 ## 9. Exemple
 

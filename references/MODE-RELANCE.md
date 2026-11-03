@@ -20,6 +20,15 @@ git log --oneline -3 && awk '/^## /{n++} n<=1' CHANGELOG.md | head -3
 - du travail a eu lieu après : le bloc de reprise peut être en retard, l'étape 3 le dira
 - aucune clôture visible : le bloc de reprise fait foi
 
+Si l'arbre porte cinq fichiers non commités ou plus (`git status -s | wc -l`) et que le CHANGELOG
+n'a pas d'entrée d'hier ou du jour, la clôture a peut-être été oubliée. Dis-le avant toute autre
+chose : la reprise part alors d'un bloc qui ne décrit pas le dépôt.
+
+**Le prompt collé.** Si l'opérateur colle le prompt qu'une clôture a rendu, sa première ligne dit
+quand et à quel commit il a été produit. Compte les commits arrivés depuis
+(`git log --oneline <commit>..HEAD`). Zéro : il fait foi, suis son démarrage. Des commits : lis-les
+avant de suivre le prompt, ils peuvent avoir fait ou défait sa prochaine étape.
+
 ## 2. Lire dans cet ordre, et pas plus
 
 Jamais un pilier en entier.
@@ -74,8 +83,8 @@ prochaine étape, ou sur l'intention donnée.
 ## Le prompt de redémarrage
 
 Quand l'opérateur veut préparer la session suivante (« prépare le redémarrage », « prompt pour
-après le `/clear` »), ton seul livrable est un prompt à coller dans la session neuve. Tu ne
-modifies aucun fichier. Si le bloc de reprise est périmé, dis-le et propose une clôture d'abord,
+après le `/clear` »), et en fin de toute clôture, ton seul livrable est un prompt à coller dans la
+session neuve. Tu ne modifies aucun fichier. Si le bloc de reprise est périmé, dis-le et propose une clôture d'abord,
 car le prompt ne vaut que ce que vaut le dépôt.
 
 Le prompt tient dans un seul bloc `text`, rien après lui. Quatre sections, chaque fait venant de
@@ -87,6 +96,15 @@ l'état réel lu, jamais inventé :
    propres à la tâche (accès, ressource externe fragile) s'ajoutent, une ligne chacune.
 4. **Démarrage** : la ligne `Vérifier le terrain` du bloc, puis la prochaine étape, puis « si une
    hypothèse est ambiguë, demande avant d'agir ».
+
+Trois règles valent pour tout le prompt :
+
+- Sa première ligne dit quand il a été produit (`Produit le AAAA-MM-JJ à HH:MM, commit <sha>`). Un
+  prompt joué trop tôt ou trop tard se reconnaît à cette ligne.
+- Un objectif daté porte sa condition : « si tu lis ceci avant le JJ/MM, commence par... ». Un prompt
+  joué trop tôt lance sinon la session sur un objectif encore inatteignable.
+- Un fait recopié porte sa source et sa date de lecture, `(lu : TODOS.md, 2026-11-02)`. Un fait
+  qui commande une décision se mesure dans la session neuve au lieu de se croire.
 
 Au-dessus du bloc, une ligne : le niveau visé et la consigne « colle ce qui suit après le
 redémarrage de contexte ».

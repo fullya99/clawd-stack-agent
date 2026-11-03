@@ -64,7 +64,14 @@ un bien et l'autre mal, et rien ne dit lequel.
 Des notes brutes, pas un rapport mis en forme. Chaque affirmation part avec son lien et sa date.
 Une source de plus de six mois se marque comme peut-être périmée. Ce qui est contesté entre deux
 sources se signale comme tel plutôt que d'être tranché à la place de l'opérateur. Rien de trouvé
-sur un point s'écrit « non trouvé », jamais une supposition habillée en fait.
+sur un point s'écrit « non trouvé », jamais une supposition habillée en fait, et jamais nu : il porte les requêtes lancées, les sources
+consultées et la date, sinon personne ne sait si le point a été cherché.
+
+Deux pièges reviennent. Une procédure reconstituée à partir de deux pages générales passe à côté
+de la page qui nomme les deux technologies ensemble, d'où une première requête qui les cite toutes
+les deux, dans les termes de l'éditeur. Et une page extraite se juge sur son code de statut avant
+son contenu : derrière un 401 ou une page de connexion, l'extraction rend quand même du texte, et
+un modèle en tire une procédure inventée.
 
 Pas d'introduction, pas de conclusion. Le chercheur qui synthétise avant de rendre perd la
 traçabilité que ces notes existent pour donner.

@@ -620,9 +620,9 @@ FICHIERS_COMMANDES_CHANGES=""
 reecrire_commandes() {
   local f sm exclu i=0 sous liste
   sous="$(sous_modules)"
-  # exclusions_find rend des motifs que le shell ne doit pas developper : set -f est actif, pas de guillemets
+  # exclusions_prune rend des motifs que le shell ne doit pas developper : set -f est actif, pas de guillemets
   # shellcheck disable=SC2046
-  liste="$(find . -maxdepth 4 -type f \( -name CLAUDE.md -o -name AGENTS.md \) $(exclusions_find) 2>/dev/null | LC_ALL=C sort)"
+  liste="$(find . -maxdepth 4 $(exclusions_prune) -o -type f \( -name CLAUDE.md -o -name AGENTS.md \) -print 2>/dev/null | LC_ALL=C sort)"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     f="${f#./}"

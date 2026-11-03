@@ -19,6 +19,7 @@ journal: date-titre
 seuils: CODEMAP.md=600, CLAUDE.md=250
 ajourne: CLAUDE.md=411@2026-09-07
 taille-forcee: moyenne
+ignorer: projets/*/context-input/**, legacy/old.sh
 exceptions: secret=tests/test_web_sante.py, lien=machines/**
 ecarts: MEMORY.md=pilier assumé, voir docs/decisions/ADR-0002
 -->
@@ -37,8 +38,43 @@ ecarts: MEMORY.md=pilier assumé, voir docs/decisions/ADR-0002
 | `seuils` | ceux de `BUDGET.md` | `fichier=lignes`, un par fichier à relever. |
 | `taille-forcee` | aucune | Impose `petite`, `moyenne` ou `grande` à la place de la mesure. |
 | `ajourne` | aucun | Dépassement gelé, `fichier=lignes@date`. Il ne doit plus grossir. |
+| `ignorer` | aucun | Globs relatifs à la racine que les scripts ne parcourent pas, voir `ignorer` plus bas. |
 | `exceptions` | aucune | `type=motif`, motif en glob shell, `**` compris. Jugements déjà rendus. |
 | `ecarts` | aucun | Écart assumé à la convention, avec sa justification. |
+
+## `ignorer`
+
+Les scripts parcourent tout ce que le disque porte, **gitignoré compris** : une note locale, un
+`context-input/` ignoré, un livrable ou un `CLAUDE.local.md` sont du contexte. Seul le généré lourd
+s'élague, reconnu à sa nature et jamais d'après le `.gitignore` :
+
+- une liste fixe : `node_modules`, `vendor`, `.venv`, `venv`, `dist`, `build`, `target`, `.next`,
+  `__pycache__`, `.cache`, `.gradle`, `Pods`, `.dart_tool`, `.nuxt`, `.svelte-kit`, `.turbo`,
+  `.parcel-cache`, `.terraform`, `.pytest_cache`, `.mypy_cache`, `.tox`.
+- tout dossier qui porte un `CACHEDIR.TAG` dont la première ligne est la signature du standard
+  (`Signature: 8a477f597d28d172789f06886806bc55`), Cargo en pose un dans `target/`.
+- les dossiers d'un moteur de jeu, **seulement si son marqueur existe**, à la racine ou jusqu'à la
+  profondeur 3 (`game/`, `clients/godot/`) : Unity (`Library`, `Temp`, `Logs`, `obj`,
+  `UserSettings` si `ProjectSettings/ProjectVersion.txt` existe), Unreal (`Intermediate`,
+  `Binaries`, `DerivedDataCache`, `Saved` si un `*.uproject` existe), Godot (`.godot` si
+  `project.godot` existe). Un plugin Unreal (`Plugins/*/*.uplugin`, profondeur 5) élague son
+  `Intermediate` et son `Binaries`. Les dossiers se lisent depuis la racine du moteur, jamais par
+  leur nom seul : un `Library/` de projet ordinaire, même à côté d'un `game/` Unity, reste
+  parcouru. Au plus 20 racines de moteur, l'audit dit combien dépassent. Un moteur plus profond se
+  couvre avec `ignorer:`.
+
+`ignorer:` couvre le dernier cas : ce que git suit mais qui ne fait pas partie du projet, un ancien
+dépôt importé tel quel. Ce sont des globs relatifs à la racine, séparés par des virgules :
+`ignorer: projets/*/context-input/**, legacy/old.sh`. Un glob qui finit par `/**`, `/*` ou `/` saute
+le contenu du dossier, `**/x` vaut `x` à toute profondeur, tout autre glob saute le chemin visé. Un
+glob qui contient une espace est ignoré. Ces fichiers ne comptent ni dans la taille du projet ni
+dans les contrôles de l'audit, de `ctx-verite.sh`, de `ctx-init.sh` et de `ctx-migrer.sh`.
+
+Un élagage se nomme toujours : la section 10 de l'audit dit en une ligne ce que `ignorer:` a fait
+sauter, avec le nombre de fichiers, ce que chaque moteur reconnu a élagué et les dossiers élagués
+par `CACHEDIR.TAG`. `ctx-init.sh` le dit après la taille. En section 1, l'audit annonce aussi, en
+information, les fichiers `.md` que git ignore (hors dossiers élagués) : ils restent du contexte
+pour les scripts, mais ils ne voyagent ni vers un collègue ni vers une autre machine.
 
 ## `taille-forcee`
 
@@ -65,6 +101,15 @@ Clés admises en plus des chemins de fichier :
 | `cout-reprise` | somme de ce qu'une session charge au départ | 600 / 900 |
 | `regles-sans-paths` | règles `.claude/rules/` sans `paths` | 150 / 200 |
 | `memoire-auto` | index de la mémoire automatique | 150 / aucun, hors dépôt |
+| `ligne` | longueur d'une ligne, en caractères, dans les fichiers d'état | 800 / aucun, une alerte par fichier |
+| `car-CODEMAP.md` | poids du CODEMAP racine, en caractères | 30 000 / 40 000 |
+| `car-<zone>/CODEMAP.md` | poids d'une carte de zone, en caractères | 20 000 / 25 000 |
+| `car-TODOS.md` | poids de TODOS, en caractères | 20 000 / 30 000 |
+| `car-cout-reprise` | somme de ce qu'une session charge au départ, en caractères | 60 000 / 90 000 |
+
+Les clés `car-` se lisent comme les autres : la valeur fixe l'alerte, le blocage suit dans le même
+rapport. Elles ne dépendent pas du seuil en lignes du même fichier, relever `CODEMAP.md=600` ne
+relève pas `car-CODEMAP.md`. Les caractères se comptent sans les octets de continuation UTF-8.
 
 ## `ajourne`
 

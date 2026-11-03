@@ -73,6 +73,10 @@ La phase que l'opérateur vit, elle reste légère.
 - Langage normal, aucun jargon d'implémentation.
 - Une question ne se pose que si la réponse change le plan. Sinon tu tranches et tu écris
   l'hypothèse.
+- Une décision qui change le plan mais que personne ne peut trancher maintenant, parce qu'une
+  information manque, ne s'invente pas et ne se reporte pas en silence. Elle s'écrit
+  `DÉCISION À PRENDRE : <question> | options | ce qui en dépend` à l'endroit du plan qu'elle
+  bloque. La contre-revue la referme avec l'opérateur.
 - Tu proposes, l'opérateur décide, tu n'élargis jamais le périmètre seul.
 - Tu termines par cinq lignes de reformulation. **Rien ne s'écrit avant le oui.**
 
@@ -137,9 +141,10 @@ action concrète. Pas de constat de goût, pas d'issue marginale pour gonfler la
    constat est **intégré** (la section du plan change, tu la cites) ou **rejeté** (raison écrite).
    Un constat sans décision écrite interdit de rendre le plan. Les validés se listent en une ligne.
 
-**Fin de phase** : le fichier du plan existe à l'emplacement prévu, `grep -nE 'TBD|TODO|à voir'`
-n'y trouve rien, la contre-revue n'a aucun Bloquant ou Majeur sans décision écrite, et chaque
-lot a son rôle.
+**Fin de phase** : le fichier du plan existe à l'emplacement prévu,
+`grep -nE 'TBD|TODO|à voir|DÉCISION À PRENDRE'` n'y trouve rien, la contre-revue n'a aucun
+Bloquant ou Majeur sans décision écrite, les interfaces se bouclent dans les deux sens
+(`references/plan/PLAN.md`, section 2), et chaque lot a son rôle.
 
 ### Phase 5. Exécution et reprise
 

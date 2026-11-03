@@ -66,22 +66,31 @@ fi
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 
+# Le bloc est lu une seule fois : sans cela chaque conv_lire ou conv_exception retrouve
+# la fiche puis relit le bloc, une dizaine de processus par alerte.
+conv_charger
+
 version_scripts || exit 2
 
 SEP="$(printf '\037')"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/ctx-verite.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 ALERTES="$TMP/alertes"
+ALERTES_IGN="$TMP/alertes-ign"
 LISTE="$TMP/liste"
 : > "$ALERTES"
+: > "$ALERTES_IGN"
 
 EN_GIT=0
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then EN_GIT=1; fi
 
 # Tous les fichiers et repertoires du depot, hors exclusions et archives, pour les
 # recherches par suffixe ou par nom seul.
+# La liste d'elagage se calcule une fois (un parcours pour les CACHEDIR.TAG), les appels
+# suivants, dans des $(...), la relisent en memoire.
+exclusions_charger
 # shellcheck disable=SC2046
-find . $(exclusions_find) \( -type f -o -type d \) 2>/dev/null | sed 's|^\./||' > "$LISTE" || true
+find . \( $(exclusions_prune) -print \) -o \( -type f -o -type d \) -print 2>/dev/null | sed 's|^\./||' > "$LISTE" || true
 
 SOUS_MODULES="$(sous_modules)"
 DIR_ARCHIVES="$(conv_lire archives)"
@@ -96,16 +105,60 @@ PILIERS="$(conv_lire piliers)"
 # --- sorties -------------------------------------------------------------------
 
 # Les exceptions du bloc ne se lisent qu'ici, au moment de signaler : les relire a chaque
-# jeton rendrait le script lent, et la plupart des jetons ne donnent rien.
+# jeton rendrait le script lent, et la plupart des jetons ne donnent rien. Elles ne se
+# decoupent qu'une fois, a la premiere alerte : les motifs `verite=` et `lien=` vont dans
+# EXC_MOTIF, et conv_exception n'a plus a relancer dix processus par cle et par alerte.
+EXC_CHARGEES=0
+EXC_NB=0
+exceptions_charger() {
+  local e t motif
+  EXC_CHARGEES=1
+  while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    t="$(printf '%s' "${e%%=*}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    motif="$(printf '%s' "${e#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    case "$t" in verite|lien) : ;; *) continue ;; esac
+    [ -n "$motif" ] || continue
+    EXC_MOTIF[$EXC_NB]="$motif"
+    EXC_NB=$((EXC_NB + 1))
+  done <<FIN
+$(conv_lire exceptions | tr ',' '\n')
+FIN
+  return 0
+}
+
+exception_couverte() { # <cle> : code 0 si un motif verite= ou lien= la couvre
+  local chemin="${1#./}" i=0 motif
+  [ "$EXC_CHARGEES" -eq 1 ] || exceptions_charger
+  while [ "$i" -lt "$EXC_NB" ]; do
+    motif="${EXC_MOTIF[$i]}"
+    # dans un case, * couvre aussi les /, donc ** et * se valent ici
+    # shellcheck disable=SC2254
+    case "$chemin" in $motif) return 0 ;; esac
+    i=$((i + 1))
+  done
+  return 1
+}
+
 alerter() { # <famille> <fichier> <ligne> <affirmation> <raison> <cle d'exception>...
-  local fam="$1" fic="$2" lig="$3" aff="$4" rai="$5" cle
+  local fam="$1" fic="$2" lig="$3" aff="$4" rai="$5" cle ign="$IGN_CLE"
+  IGN_CLE=""
   shift 5
   for cle in "$@"; do
-    if conv_exception verite "$cle" || conv_exception lien "$cle"; then return 0; fi
+    if exception_couverte "$cle"; then return 0; fi
   done
+  # Une alerte sur un chemin que git ignorerait peut-etre attend le verdict de git, rendu
+  # pour tous les chemins d'un coup (ignorer_en_lot) : un processus git par chemin coute cher.
+  if [ -n "$ign" ]; then
+    printf '%s%s%s%s%s%s%s%s%s%s%s\n' "$ign" "$SEP" "$fam" "$SEP" "$fic" "$SEP" "$lig" "$SEP" "$aff" "$SEP" "$rai" >> "$ALERTES_IGN"
+    return 0
+  fi
   printf '%s%s%s%s%s%s%s%s%s\n' "$fam" "$SEP" "$fic" "$SEP" "$lig" "$SEP" "$aff" "$SEP" "$rai" >> "$ALERTES"
   return 0
 }
+
+# Chemin dont verifier_chemin attend le verdict de git, que alerter lit une fois.
+IGN_CLE=""
 
 # --- aides de resolution -------------------------------------------------------
 
@@ -157,11 +210,82 @@ FIN
   return 1
 }
 
-# Chemin du premier fichier du depot qui porte exactement ce nom, ou rien.
+# Index de la liste des fichiers, pour chercher un suffixe sans lancer awk a chaque jeton
+# (plusieurs milliers de recherches sur un depot dense). Un seul awk range la liste en
+# seaux selon la premiere lettre du nom de base, minuscule : c_<k> garde les chemins tels
+# quels (precedes d'un `/`), l_<k> les memes passes par le tolower d'awk. Un seau se lit
+# dans une variable la premiere fois qu'on le demande, et une recherche ne parcourt que lui.
+NL="$(printf '\nx')"; NL="${NL%x}"
+IDX="$TMP/idx"
+mkdir "$IDX"
+awk -v dir="$IDX" '
+  { c = "/" $0
+    b = c; sub(/^.*\//, "", b)
+    k = tolower(substr(b, 1, 1))
+    if (k !~ /^[a-z0-9]$/) k = "_"
+    print c > (dir "/c_" k)
+    print tolower(c) > (dir "/l_" k)
+  }' "$LISTE"
+
+# Minuscules ASCII de <texte> dans MIN, sans processus (l'ancien tr 'A-Z' 'a-z').
+MIN=""
+minuscules() { # <texte>
+  MIN="$1"
+  # rien a changer sans majuscule ASCII, et [:lower:] n'en contient aucune
+  case "$MIN" in
+    *[![:lower:][:digit:]/._-]*) : ;;
+    *) return 0 ;;
+  esac
+  MIN="${MIN//A/a}"; MIN="${MIN//B/b}"; MIN="${MIN//C/c}"; MIN="${MIN//D/d}"; MIN="${MIN//E/e}"
+  MIN="${MIN//F/f}"; MIN="${MIN//G/g}"; MIN="${MIN//H/h}"; MIN="${MIN//I/i}"; MIN="${MIN//J/j}"
+  MIN="${MIN//K/k}"; MIN="${MIN//L/l}"; MIN="${MIN//M/m}"; MIN="${MIN//N/n}"; MIN="${MIN//O/o}"
+  MIN="${MIN//P/p}"; MIN="${MIN//Q/q}"; MIN="${MIN//R/r}"; MIN="${MIN//S/s}"; MIN="${MIN//T/t}"
+  MIN="${MIN//U/u}"; MIN="${MIN//V/v}"; MIN="${MIN//W/w}"; MIN="${MIN//X/x}"; MIN="${MIN//Y/y}"
+  MIN="${MIN//Z/z}"
+}
+
+# Pose dans BUCKET le seau <l|c> de la premiere lettre de <nom de base>, un retour a la
+# ligne devant et un derriere chaque ligne. Les lettres hors a-z et 0-9 partagent le seau _.
+BUCKET=""
+seau() { # <l|c> <nom de base>
+  local k v contenu=""
+  case "${2:0:1}" in
+    a|A) k=a ;; b|B) k=b ;; c|C) k=c ;; d|D) k=d ;; e|E) k=e ;; f|F) k=f ;; g|G) k=g ;;
+    h|H) k=h ;; i|I) k=i ;; j|J) k=j ;; k|K) k=k ;; l|L) k=l ;; m|M) k=m ;; n|N) k=n ;;
+    o|O) k=o ;; p|P) k=p ;; q|Q) k=q ;; r|R) k=r ;; s|S) k=s ;; t|T) k=t ;; u|U) k=u ;;
+    v|V) k=v ;; w|W) k=w ;; x|X) k=x ;; y|Y) k=y ;; z|Z) k=z ;;
+    0|1|2|3|4|5|6|7|8|9) k="${2:0:1}" ;;
+    *) k=_ ;;
+  esac
+  v="SEAU_${1}_$k"
+  eval "BUCKET=\${$v-}"
+  if [ -z "$BUCKET" ]; then
+    if [ -f "$IDX/${1}_$k" ]; then IFS= read -r -d '' contenu < "$IDX/${1}_$k" || true; fi
+    BUCKET="$NL$contenu"
+    eval "$v=\$BUCKET"
+  fi
+}
+
+# Chemin du premier fichier du depot qui porte exactement ce nom, dans TROUVE, ou rien.
+TROUVE=""
 trouver_ailleurs() { # <nom>
-  awk -v n="/$1" '
-    { c = "/" $0; l = length(c); k = length(n)
-      if (l >= k && substr(c, l - k + 1) == n) { print; exit } }' "$LISTE"
+  local n="/$1" l IFS="$NL"
+  TROUVE=""
+  seau c "$1"
+  case "$BUCKET" in
+    *"$n$NL"*) ;;
+    *) return 0 ;;
+  esac
+  # le seau garde l'ordre de la liste : la premiere ligne qui se termine ainsi. set -f est
+  # actif, et IFS (local) coupe le seau en lignes.
+  # shellcheck disable=SC2086
+  set -- $BUCKET
+  for l in "$@"; do
+    case "$l" in
+      *"$n") TROUVE="${l#/}"; return 0 ;;
+    esac
+  done
+  return 0
 }
 
 premier_connu() { # <dossier du doc> <chemin ou segment>
@@ -179,10 +303,14 @@ premier_connu() { # <dossier du doc> <chemin ou segment>
 
 # Un chemin se termine-t-il par ce suffixe dans la liste des fichiers du depot ?
 existe_par_suffixe() { # <suffixe>
-  awk -v n="$(printf '/%s' "$1" | tr 'A-Z' 'a-z')" '
-    { c = "/" $0; l = length(c); k = length(n)
-      if (l >= k && tolower(substr(c, l - k + 1)) == n) { trouve = 1; exit } }
-    END { exit trouve ? 0 : 1 }' "$LISTE"
+  local n
+  minuscules "/$1"
+  n="$MIN"
+  seau l "${n##*/}"
+  case "$BUCKET" in
+    *"$n$NL"*) return 0 ;;
+  esac
+  return 1
 }
 
 # Resout <chemin> depuis le dossier du document, puis ses parents, puis la racine.
@@ -201,7 +329,7 @@ resoudre() { # <dossier du doc> <chemin>
   case "$p" in
     ../*) return 1 ;;
     */*)  if existe_par_suffixe "$p"; then RES="$p"; return 0; fi ;;
-    *)    if existe_par_suffixe "$p"; then RES="$(trouver_ailleurs "$p")"; return 0; fi ;;
+    *)    if existe_par_suffixe "$p"; then trouver_ailleurs "$p"; RES="$TROUVE"; return 0; fi ;;
   esac
   return 1
 }
@@ -282,6 +410,12 @@ forme_chemin() { # <chemin normalise>
 SCRIPT_RESOLU=""
 POS_SPAN="m"
 verifier_chemin() { # <doc> <ligne> <jeton brut>
+  verifier_chemin_corps "$@"
+  IGN_CLE=""
+  return 0
+}
+
+verifier_chemin_corps() { # <doc> <ligne> <jeton brut>
   local doc="$1" ligne="$2" brut="$3" t forme docdir parent base famille tilde="" deplace=""
   SCRIPT_RESOLU=""
   normaliser_chemin "$brut"
@@ -298,7 +432,9 @@ verifier_chemin() { # <doc> <ligne> <jeton brut>
     if [ -f "$RES" ] && ext_script "${RES##*/}"; then SCRIPT_RESOLU="$RES"; fi
     return 0
   fi
-  if ignore_par_git "${t%/}"; then return 0; fi
+  # Ignore par git : le verdict vient plus tard, en lot, voir alerter. Hors depot git,
+  # rien n'est ignore.
+  if [ "$EN_GIT" -eq 1 ]; then IGN_CLE="${t%/}"; fi
 
   # Un chemin dont le dossier parent n'existe pas et dont le nom ne se trouve nulle part
   # designe presque toujours une bibliotheque tierce, un autre depot ou un dossier
@@ -343,7 +479,7 @@ verifier_chemin() { # <doc> <ligne> <jeton brut>
       README.md|readme.md|index.*|__init__.py|main.*|Makefile|LICENSE*) : ;;
       # un nom de configuration est porte par trop d outils pour prouver un deplacement
       *.json|*.yaml|*.yml|*.toml|*.ini|*.cfg) : ;;
-      *) deplace="$(trouver_ailleurs "$base")" ;;
+      *) trouver_ailleurs "$base"; deplace="$TROUVE" ;;
     esac
     if [ -n "$deplace" ]; then
       famille=chemin
@@ -375,17 +511,49 @@ verifier_chemin() { # <doc> <ligne> <jeton brut>
 
 # --- options d'un script -------------------------------------------------------
 
+# Equivalent de `grep -Fq -- <texte> <fichier>`, sans un grep par question : un script cite
+# se lit une fois en memoire (OPT_TEXTE) et les questions suivantes n'y lancent plus rien.
+# Un fichier qui n'est pas un script, illisible, trop gros ou qui porte un octet nul reste a
+# grep : on ne charge jamais en memoire un fichier de donnees voisin.
+OPT_NB=0
+script_contient() { # <fichier> <texte>
+  local f="$1" t="$2" i=0 c=""
+  [ -n "$t" ] || { grep -Fq -- "$t" "$f" 2>/dev/null; return $?; }
+  while [ "$i" -lt "$OPT_NB" ]; do
+    [ "${OPT_FICHIER[$i]}" = "$f" ] && break
+    i=$((i + 1))
+  done
+  if [ "$i" -eq "$OPT_NB" ]; then
+    OPT_FICHIER[$i]="$f"; OPT_TEXTE[$i]=""; OPT_MODE[$i]="grep"
+    OPT_NB=$((OPT_NB + 1))
+    if ext_script "${f##*/}" && [ -f "$f" ] && [ -r "$f" ]; then
+      # read rend 0 s'il tombe sur un octet nul : le texte est alors tronque, on garde grep
+      if ! IFS= read -r -d '' c < "$f" && [ "${#c}" -le 60000 ]; then
+        OPT_TEXTE[$i]="$c"; OPT_MODE[$i]=memoire
+      fi
+    fi
+  fi
+  if [ "${OPT_MODE[$i]}" = memoire ]; then
+    case "${OPT_TEXTE[$i]}" in
+      *"$t"*) return 0 ;;
+    esac
+    return 1
+  fi
+  grep -Fq -- "$t" "$f" 2>/dev/null
+  return $?
+}
+
 # L'option apparait-elle dans le script, ou dans un fichier voisin qu'il source ?
 option_presente() { # <script> <option>
   local s="$1" o="${2%%=*}" dir f nom
-  if grep -Fq -- "$o" "$s" 2>/dev/null; then return 0; fi
+  if script_contient "$s" "$o"; then return 0; fi
   case "$s" in */*) dir="${s%/*}" ;; *) dir="." ;; esac
   # set -f est actif : pas de glob, find fait la liste
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     [ "$f" != "$s" ] || continue
     nom="${f##*/}"
-    if grep -Fq -- "$nom" "$s" 2>/dev/null && grep -Fq -- "$o" "$f" 2>/dev/null; then return 0; fi
+    if script_contient "$s" "$nom" && script_contient "$f" "$o"; then return 0; fi
   done <<FIN
 $(find "$dir" -maxdepth 1 -type f 2>/dev/null)
 FIN
@@ -503,7 +671,7 @@ DOC_COURANT=""
 SPANS_LIGNE=""
 
 vider_ligne() {
-  local entree span opt script_unique nb s ligne="$LIGNE_COURANTE" doc="$DOC_COURANT"
+  local entree span opt script_unique nb sl s ligne="$LIGNE_COURANTE" doc="$DOC_COURANT"
   local scripts_ligne="" options_seules="" pos_script="m"
   [ -n "$ligne" ] || return 0
   while IFS= read -r entree; do
@@ -563,8 +731,18 @@ $SCRIPT_RESOLU"
 $SPANS_LIGNE
 FIN
   if [ -n "$options_seules" ]; then
-    script_unique="$(printf '%s\n' "$scripts_ligne" | sed '/^$/d' | sort -u)"
-    nb="$(printf '%s\n' "$script_unique" | sed '/^$/d' | wc -l | tr -d ' ')"
+    # les scripts distincts de la ligne : on ne garde que le cas d'un seul, sans processus
+    script_unique=""; nb=0
+    while IFS= read -r sl; do
+      [ -n "$sl" ] || continue
+      if [ "$nb" -eq 0 ]; then
+        script_unique="$sl"; nb=1
+      elif [ "$sl" != "$script_unique" ]; then
+        nb=2; break
+      fi
+    done <<FIN
+$scripts_ligne
+FIN
     if [ "$nb" -eq 1 ]; then
       while IFS= read -r opt; do
         [ -n "$opt" ] || continue
@@ -582,12 +760,10 @@ FIN
 
 compter_fichiers() { # <dossier> <nom>
   local d="$1" nom="$2" liste
-  if [ "$EN_GIT" -eq 1 ]; then
-    liste="$(git ls-files -co --exclude-standard -- "$d" 2>/dev/null || true)"
-  else
-    # shellcheck disable=SC2046
-    liste="$(find "$d" $(exclusions_find) -type f 2>/dev/null || true)"
-  fi
+  # Toujours le disque, jamais `git ls-files -co --exclude-standard` : un fichier ignore par git
+  # (notes locales, script local) est dans le dossier, il compte. Seul le genere lourd s'elague.
+  # shellcheck disable=SC2046
+  liste="$(find "$d" $(exclusions_prune) -o -type f -print 2>/dev/null || true)"
   case "$nom" in
     scripts)
       printf '%s\n' "$liste" | awk '/\.(sh|bash|py|js|mjs|cjs|ts|rb|pl|ps1)$/ {n++} END {print n + 0}'
@@ -843,23 +1019,63 @@ if [ -d "$DIR_DOCS" ]; then
     set -- "$@" -not -path "*/$h/*"
   done
   # shellcheck disable=SC2046
-  find "$DIR_DOCS" $(exclusions_find) -name '*.md' -not -path "$DIR_ARCHIVES/*" "$@" \
-    -not -name 'journal*' -not -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' 2>/dev/null \
+  find "$DIR_DOCS" $(exclusions_prune) -o -name '*.md' -not -path "$DIR_ARCHIVES/*" "$@" \
+    -not -name 'journal*' -not -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' -print 2>/dev/null \
     | LC_ALL=C sort >> "$LISTE_DOCS" || true
 fi
 sort -u "$LISTE_DOCS" -o "$LISTE_DOCS"
 
 # Manifestes du depot, ecartes des dossiers exclus.
 # shellcheck disable=SC2046
-PACKAGES="$(find . -maxdepth 4 -name package.json $(exclusions_find) 2>/dev/null | sed 's|^\./||' || true)"
+PACKAGES="$(find . -maxdepth 4 $(exclusions_prune) -o -name package.json -print 2>/dev/null | sed 's|^\./||' || true)"
 # shellcheck disable=SC2046
-MAKEFILES="$(find . -maxdepth 4 \( -name Makefile -o -name makefile -o -name GNUmakefile -o -name '*.mk' \) $(exclusions_find) 2>/dev/null | sed 's|^\./||' || true)"
+MAKEFILES="$(find . -maxdepth 4 $(exclusions_prune) -o \( -name Makefile -o -name makefile -o -name GNUmakefile -o -name '*.mk' \) -print 2>/dev/null | sed 's|^\./||' || true)"
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   f="${f#./}"
   traiter_fichier "$f"
 done < "$LISTE_DOCS"
+
+# Verdict de git sur les chemins des alertes en attente : un seul git check-ignore pour
+# tous, en prenant chaque chemin sous ses deux formes (avec et sans slash final) comme
+# ignore_par_git. Un chemin qui sort du depot (`..`) ou tout echec du lot repasse par
+# ignore_par_git, chemin par chemin, qui reste la reference. Un chemin ignore perd son alerte.
+ignorer_en_lot() {
+  local k rc=0 LOT="$TMP/ign-lot" ENTREE="$TMP/ign-entree" SORTIE="$TMP/ign-sortie" IGNORES="$TMP/ign-liste"
+  : > "$IGNORES"
+  : > "$LOT"
+  awk -v SEP="$SEP" '
+    { i = index($0, SEP); k = substr($0, 1, i - 1)
+      if (!(k in vu)) { vu[k] = 1; print k } }' "$ALERTES_IGN" > "$TMP/ign-cles"
+  # les chemins qui remontent hors de la racine : git les refuse, on les juge un par un
+  while IFS= read -r k; do
+    case "$k" in
+      ..|../*|*/..|*/../*) if ignore_par_git "$k"; then printf '%s\n' "$k" >> "$IGNORES"; fi ;;
+      *) printf '%s\n%s/\n' "$k" "$k" >> "$LOT" ;;
+    esac
+  done < "$TMP/ign-cles"
+  if [ -s "$LOT" ]; then
+    tr '\n' '\0' < "$LOT" > "$ENTREE"
+    git check-ignore -z --stdin < "$ENTREE" > "$SORTIE" 2>/dev/null || rc=$?
+    if [ "$rc" -le 1 ]; then
+      tr '\0' '\n' < "$SORTIE" >> "$IGNORES"
+    else
+      while IFS= read -r k; do
+        case "$k" in
+          ..|../*|*/..|*/../*) continue ;;
+        esac
+        if ignore_par_git "$k"; then printf '%s\n' "$k" >> "$IGNORES"; fi
+      done < "$TMP/ign-cles"
+    fi
+  fi
+  awk -v SEP="$SEP" '
+    FILENAME == ARGV[1] { ign[$0] = 1; next }
+    { i = index($0, SEP); k = substr($0, 1, i - 1)
+      if (!(k in ign) && !((k "/") in ign)) print substr($0, i + 1) }' "$IGNORES" "$ALERTES_IGN" >> "$ALERTES"
+  return 0
+}
+if [ -s "$ALERTES_IGN" ]; then ignorer_en_lot; fi
 
 # --- rendu ---------------------------------------------------------------------
 

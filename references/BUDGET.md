@@ -44,18 +44,26 @@ Le nombre dit d'aller regarder, ce qu'on trouve dit quel geste prendre.
 |---|---|---|---|
 | `CLAUDE.md` racine | ≤ 100 lignes | 150 | 200 lignes, ou 40 000 caractères |
 | `CLAUDE.md` de zone | ≤ 30 | 40 | 60 |
-| `CODEMAP.md` racine | ≤ 250 | 300 | 400 |
-| `CODEMAP.md` de zone | ≤ 150 | 200 | 250 |
-| `TODOS.md` | ≤ 150 | 200 | 300 |
+| `CODEMAP.md` racine | ≤ 250 | 300 lignes, ou 30 000 caractères | 400 lignes, ou 40 000 caractères |
+| `CODEMAP.md` de zone | ≤ 150 | 200 lignes, ou 20 000 caractères | 250 lignes, ou 25 000 caractères |
+| `TODOS.md` | ≤ 150 | 200 lignes, ou 20 000 caractères | 300 lignes, ou 30 000 caractères |
 | bloc « État à la reprise » | ≤ 40 | 50 | 80 |
 | `CHANGELOG.md` | ≤ 30 entrées | 40 entrées ou 1 000 lignes | 60 entrées ou 1 500 lignes |
 | une entrée de CHANGELOG | ≤ 25 lignes | 40 | pas de blocage, on signale |
 | fiche `docs/` | ≤ 200 | 250 | 300 |
+| une ligne de `TODOS.md`, `CODEMAP.md`, `CLAUDE.md`, `CHANGELOG.md` (hors bloc de code) | pas de cible, seule l'alerte se mesure | 800 caractères, clé `ligne` | pas de blocage, une alerte par fichier |
 | tout journal (≥ 10 titres `## AAAA-MM-JJ`) | comme le CHANGELOG | | |
 | règles `.claude/rules/` sans `paths` (total) | ≤ 100 | 150 | 200 |
-| coût total de reprise | ≤ 450 | 600 | 900 |
+| coût total de reprise | ≤ 450 lignes | 600 lignes, ou 60 000 caractères | 900 lignes, ou 90 000 caractères |
 | index de la mémoire automatique | ≤ 100 | 150 | pas de blocage, hors dépôt |
 | plan terminé | résumé de 20 lignes | plus de 300 lignes, ou une case `[ ]` ouverte | pas de blocage |
+
+Le seuil en caractères vaut cent caractères par ligne de budget. Un budget en lignes ne voit pas un
+fichier court dont chaque ligne est un tableau ou une preuve : un `CODEMAP.md` de 191 lignes peut
+peser 126 000 caractères et passer sous 300 lignes. Les caractères se comptent sans les octets de
+continuation UTF-8, une lettre accentuée vaut un caractère, pas deux. Ils s'ajoutent aux lignes, ils
+ne les remplacent pas : le premier seuil franchi parle. Pour le coût de reprise, le message donne
+aussi un ordre de grandeur en tokens, caractères divisés par quatre, qui n'entre dans aucun seuil.
 
 Taille du projet, comptée en fichiers hors `.git`, dépendances, builds, `archives/` :
 
@@ -79,7 +87,9 @@ mémoire automatique se lisent en section 11, que `--budget` saute.
 le même rapport que les valeurs par défaut du tableau, arrondi à l'entier : `CODEMAP.md=600` donne
 une alerte à 600 et un blocage à 800, comme 300 et 400 par défaut. Les surfaces qui ne sont pas un
 fichier ont leur clé : `reprise` (bloc de reprise), `cout-reprise`, `regles-sans-paths`,
-`memoire-auto`.
+`memoire-auto`. Le seuil en caractères d'un fichier a sa clé `car-<fichier>` (`car-CODEMAP.md=40000`
+donne une alerte à 40 000 caractères et un blocage à 53 333), et celui du coût de reprise
+`car-cout-reprise`. Relever le seuil en lignes d'un fichier ne relève pas son seuil en caractères.
 
 `ajourne: <fichier>=N@AAAA-MM-JJ` gèle un dépassement à sa valeur et à sa date. Tant que le
 fichier ne dépasse pas N, son alerte ou son blocage ne se dit plus, l'audit le rappelle en
@@ -94,7 +104,14 @@ dit quand la mesure la contredit.
 Ce qu'une session charge avant la première question : `CLAUDE.md`, les fichiers qu'il importe par
 `@` (quatre sauts), les règles `.claude/rules/` sans `paths`, le bloc de reprise de TODOS, le
 `CODEMAP.md` racine et les trois dernières entrées du journal. Chaque fichier peut tenir dans son
-budget et la somme déborder, c'est le cas que ce seuil attrape. `--budget` donne le détail.
+budget et la somme déborder, c'est le cas que ce seuil attrape. `--budget` donne le détail, en
+lignes puis en caractères : la somme des mêmes surfaces compte aussi 60 000 caractères d'alerte et
+90 000 de blocage.
+
+Au-delà de cinq alertes de même nature dans une section (« pas d'en-tête de statut » sur cent
+fiches), le rapport en texte imprime les trois premières puis une ligne « et N autres de même
+nature ». Le nombre d'alertes du bilan les compte toutes, un blocage n'est jamais regroupé, et
+`--json` garde chaque entrée avec un champ `nature`.
 
 Une règle en `globs:` ne se charge jamais par chemin, Claude Code ne lit que `paths`. Elle compte
 donc dans les règles sans `paths`, et l'audit la signale.

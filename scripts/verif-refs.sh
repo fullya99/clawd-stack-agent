@@ -33,6 +33,9 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# Une barre finale doublerait le separateur dans les motifs de glob : p6//src/*.ts.
+RACINE="${RACINE%/}"
+[ -n "$RACINE" ] || RACINE=/
 
 [ -n "$FICHIERS" ] || { echo "Usage : bash verif-refs.sh [--format=md] <fichier.md> [...]" >&2; exit 2; }
 [ -d "$RACINE" ]   || { echo "racine introuvable : $RACINE" >&2; exit 2; }
@@ -111,7 +114,10 @@ verif_glob() { # <ligne> <jeton>
   # find traite * comme n'importe quelle suite de caracteres, separateur compris,
   # donc ** se replie sur * sans changer le resultat.
   motif="$(printf '%s' "$2" | sed 's|\*\*|*|g')"
-  case "$motif" in /*) motif=".$motif" ;; ./*) : ;; *) motif="./$motif" ;; esac
+  # find rend des chemins qui commencent par $RACINE : le motif s'y ancre, sinon --racine <dir>
+  # ne matche jamais rien.
+  case "$motif" in /*) motif="${motif#/}" ;; ./*) motif="${motif#./}" ;; esac
+  motif="$RACINE/$motif"
   # nb, pas n : n est le compteur de lignes de lire(), l'ecraser decale tout le rapport.
   nb="$(find "$RACINE" -path "$motif" -not -path '*/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')"
   if [ "$nb" -gt 0 ]; then
@@ -237,7 +243,7 @@ lire() { # <fichier>
     # Un import @chemin charge le fichier au demarrage, recursivement jusqu'a quatre
     # sauts. Entre accents graves il redevient du texte, donc on le cherche avant de
     # decouper la ligne en jetons, et on saute les lignes ou il est protege.
-    imp="$(printf '%s\n' "$ligne" | grep -oE '(^|[[:space:]])@[^[:space:]`)]+' 2>/dev/null | sed 's/^[[:space:]]*//' || true)"
+    imp="$(printf '%s\n' "$ligne" | sed 's/`[^`]*`//g' | grep -oE '(^|[[:space:]])@[^[:space:]`)]+' 2>/dev/null | sed 's/^[[:space:]]*//' || true)"
     if [ -n "$imp" ]; then
       printf '%s\n' "$imp" | while IFS= read -r cible; do
         cible="${cible#@}"

@@ -32,6 +32,18 @@ bash "$SKILL/scripts/ctx-audit.sh" --budget
 
 **Observable** : la liste des niveaux touchés est écrite, et la sortie de `--budget` est lue.
 
+## Lire un contrôle sans perdre son code
+
+Vaut pour chaque contrôle des phases qui suivent. Le code se lit sur la commande elle-même, jamais
+derrière un tube : `ctx-verite.sh --strict | tail -3` rend le code de `tail`, donc 0 sur un rouge.
+
+```bash
+bash "$SKILL/scripts/ctx-verite.sh" --strict > <dossier temporaire>/verite.txt 2>&1; echo "code $?"
+```
+
+Puis lis le fichier. Un contrôle qui n'a rien regardé (code 2, aucun fichier trouvé, dépendance
+absente) n'est pas un vert, il se rejoue sur le bon périmètre ou se nomme au compte rendu.
+
 ## Phase 1. Auditer le réel, sans croire la doc
 
 ```bash
@@ -51,14 +63,22 @@ et une seule : corrigé en phase 2 ou 3, ou archivé en phase 4.
 |---|---|
 | `CHANGELOG.md` | En haut, `## AAAA-MM-JJ, titre` : quoi, pourquoi, rollback. 25 lignes au plus, le gros lot pointe vers `docs/`. |
 | `CODEMAP.md` | Reflète la structure : module ajouté, retiré ou renommé, point d'entrée, dépendance, commande. Retire ce qui n'existe plus. Un piège va dans la carte de sa zone ou la fiche de son module. Date et cartes de zone à jour. |
-| `TODOS.md` | Coche le fait puis supprime-le, supprime l'obsolète, ajoute les tâches découvertes. Puis réécris le bloc « État à la reprise » depuis l'état courant, jamais en éditant le précédent. |
+| `TODOS.md` | Coche le fait puis supprime-le, supprime l'obsolète, ajoute les tâches découvertes. Un travail différé porte son échéance, `- [ ] (échéance AAAA-MM-JJ) description`, pour que la reprise la voie. Puis réécris le bloc « État à la reprise » depuis l'état courant, jamais en éditant le précédent. |
 
 Le bloc tient en 40 lignes, quatre champs plus une ligne `Vérifier le terrain` : la commande qui
 confirme que le dépôt est dans l'état décrit, copiable telle quelle (tests, `git status -s`, ce que
 le projet a de plus rapide). Avant de retirer quoi que ce soit du bloc, classe : un événement est
 déjà au CHANGELOG, un piège va dans la carte de sa zone ou la fiche de son module, une tâche dans la
-liste avec son ancrage, une décision en ADR. Le récit ne se garde pas. Une affirmation non vérifiée
-porte « à vérifier ».
+liste avec son ancrage, une décision en ADR. Le récit ne se garde pas.
+
+Chaque fait du bloc dit d'où il vient, pour que la reprise sache quoi revérifier : `(vu : <commande>)`
+quand une commande l'a montré cette session, `(lu : <fichier>)` quand il est recopié, `(supposé)`
+sinon. Un fait qui commande la prochaine étape ne reste pas `(supposé)` : il se mesure maintenant ou
+devient la première tâche de la reprise.
+
+**Échéances passées.** Chaque tâche du périmètre touché dont l'échéance est passée se tranche ici :
+faite, reportée avec une date neuve et sa raison, ou archivée parce que les faits l'ont dépassée.
+Aucune ne reste en rappel. Un rappel qui revient à chaque reprise sans être tranché ne se lit plus.
 
 Les faits durables vont chez leur propriétaire, jamais dans un pilier. La question : qui est
 propriétaire de cette phrase ? Si tu ne sais pas, elle n'a probablement pas à être écrite.
@@ -201,7 +221,11 @@ porte ni état ni récit.
    `Séance : 3 fiches corrigées, 2 archivées, 4 alertes d'audit avant, 1 après, 2 relectures
    contradicteur, 1 phrase fausse trouvée.` Des nombres mesurés, pas une impression.
 2. **Commit.** Jamais sans demande explicite, tu proposes et tu attends. Sur demande : une branche
-   de travail, un message qui dit le quoi et le pourquoi.
+   de travail, un message qui dit le quoi et le pourquoi. Tu ajoutes par chemins explicites,
+   jamais `git add -A` : une autre session dans le même dossier partage l'index git, et un commit
+   peut porter le titre de l'une et les fichiers de l'autre. Juste après, `git log -1 --stat`, et
+   la liste doit être celle de la clôture. Sur demande de push, il n'a atterri que si
+   `git rev-parse HEAD` et `git rev-parse @{u}` rendent la même valeur.
 3. **Contrôle final.** Tout ce que la clôture a touché est dans le commit :
 
    ```bash
@@ -212,6 +236,10 @@ porte ni état ni récit.
    Un fichier de la clôture encore listé est un oubli.
 4. **Défaire.** Une clôture ratée se défait par `git revert <commit>`, jamais par une édition à la
    main. C'est pourquoi la clôture tient dans un seul commit et que le CHANGELOG porte son rollback.
+5. **Passation.** Sauf si la note de clôture contient `sans-relance`, rédige le prompt de
+   redémarrage (format dans `references/MODE-RELANCE.md`, rubrique « Le prompt de redémarrage »).
+   Aucun fichier ne le range pour toi : il se donne dans le compte rendu, que l'opérateur colle
+   dans la session neuve.
 
 ## Phase 8. Compte rendu
 
@@ -219,5 +247,6 @@ Texte simple, jamais d'artifact : ce qui a été fait en 1 à 3 lignes, puis une
 piliers, `docs/` (fiches ajoutées, corrigées, ADR), `archives/` (éléments et raison), la vérité
 (corrections de `ctx-verite.sh`, phrases fausses du contradicteur), la mémoire automatique
 (promues, supprimées), ta mémoire d'agent (`MEMORY.md` et `USER.md`, skills touchés), le budget (tailles avant et après), `CLAUDE.md`, les niveaux mis à jour, et
-le reste à faire avec un pointeur vers `TODOS.md`. Il se termine par « Prêt pour un contexte neuf »
+le reste à faire avec un pointeur vers `TODOS.md`, et le prompt de relance (donné, ou pourquoi
+non). Chaque contrôle cité porte son code nu. Il se termine par « Prêt pour un contexte neuf »
 seulement si la phase 6 passe.

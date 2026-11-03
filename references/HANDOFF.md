@@ -71,6 +71,29 @@ pour plus tard.
 - [ ] Le parent pointe vers la doc des enfants, il ne l'a pas absorbée.
 - [ ] Chaque zone touchée a sa carte à jour, et chaque zone est citée dans le CODEMAP racine.
 
+### Ce qui prouve une case cochée
+
+Une case se coche sur une preuve fraîche de cette session, jamais sur un souvenir.
+
+| Affirmation | Preuve exigée | Ce qui ne suffit pas |
+|---|---|---|
+| un contrôle est vert | son code nu, lu sur la commande elle-même | un `tail` en bout de tube, qui rend 0, ou un code 2 (rien regardé) |
+| la doc dit vrai | `ctx-verite.sh --strict` rend 0 | une relecture de mémoire |
+| c'est commité | `git log -1 --stat` liste les fichiers de la clôture | `git status` propre (un autre commit a pu les emporter) |
+| c'est poussé | `git rev-parse HEAD` égale `git rev-parse @{u}` | un push lancé dont on n'a pas lu le code |
+| un agent a fini | son diff relu, sa commande de fin rejouée | son rapport « Fait » |
+| rien n'utilise X | la commande qui l'aurait trouvé, et ce qu'elle a balayé | un `grep` qui saute les fichiers ignorés par git |
+| l'opérateur a validé | sa phrase, sur ce point précis | un « ok » donné sur autre chose |
+
+### Les excuses qui font sauter une clôture
+
+| Ce qu'on se dit | Ce qui est vrai |
+|---|---|
+| « Je l'ai vu passer tout à l'heure » | Une sortie vue avant la dernière édition ne prouve rien sur l'état actuel |
+| « C'est une petite session, pas besoin » | La phase 4 et la phase 5 se jouent toujours, une ligne suffit |
+| « Je le noterai à la prochaine clôture » | Il n'y a pas de prochaine fois, il y a un redémarrage qui l'efface |
+| « Le sous-agent a dit que c'était bon » | Son rapport est une affirmation, le diff est la preuve |
+
 ---
 
 ## Anti-patterns de passation

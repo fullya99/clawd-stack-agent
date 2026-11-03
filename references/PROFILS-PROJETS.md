@@ -9,16 +9,24 @@
 Sans bloc dans `CODEMAP.md`, INIT déduit le profil des fichiers présents, prend le dominant et
 note les autres dans le bloc. En cas de doute, il demande.
 
+`ctx-init.sh` teste dans cet ordre, du plus spécifique au plus général : un moteur de jeu ou une
+app mobile porte aussi un `package.json` ou un dossier `Packages/`, il passe donc avant app et
+monorepo. Les noms de dossier se comparent à la casse près, parce que macOS répond oui à
+`packages/` pour le `Packages/` d'Unity. Le banc `tests/test-ctx-init.sh` fixe chaque ligne.
+
 | Indices | Profil |
 |---|---|
-| `package.json` avec framework web, `manage.py`, `main.go`, `Program.cs` | app |
-| `pyproject.toml` sans point d'entrée, `Cargo.toml` en lib, un `index.ts` exporté | lib |
-| `terraform/`, `ansible/`, `k8s/`, `docker-compose.yml` | infra |
-| `notebooks/`, `dvc.yaml`, `train.py` | data |
-| `content/`, `posts/`, majorité de `.md` | contenu |
-| `packages/`, `pnpm-workspace.yaml`, `turbo.json`, `go.work` | monorepo |
+| `.claude-plugin/plugin.json`, `skills/*/SKILL.md`, `SKILL.md`, `.claude/skills/` | outillage-agent |
+| `ProjectSettings/ProjectVersion.txt` (Unity), `project.godot`, `*.uproject` (Unreal) | jeu |
+| `pubspec.yaml` (Flutter), `android/` et `ios/` ensemble, `*.xcodeproj`, `app/src/main/AndroidManifest.xml` | mobile |
+| `pnpm-workspace.yaml`, `turbo.json`, `go.work`, `nx.json`, `lerna.json`, `packages/`, `apps/` | monorepo |
+| `src-tauri/`, `electron` dans `package.json` | desktop |
+| `terraform/`, `ansible/`, `k8s/`, `*.tf`, `Chart.yaml` | infra |
+| `notebooks/`, `*.ipynb`, `dvc.yaml` | data |
+| `Cargo.toml` avec `src/lib.rs` sans `src/main.rs`, `package.json` qui exporte sans script `start` ni `dev` | lib |
+| `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `manage.py`, `pom.xml`, `build.gradle`, `composer.json`, `Gemfile`, `mix.exs`, `Package.swift`, `deno.json`, `CMakeLists.txt`, `*.sln`, `*.csproj`, `requirements.txt` | app |
+| `content/`, `posts/` | contenu |
 | `.gitmodules` avec des enfants équipés | parent à sous-modules |
-| `SKILL.md`, `plugin.json`, `commands/` | outillage-agent |
 | aucun code, documents et suivi | non technique |
 
 ## La taille
@@ -61,6 +69,26 @@ artefacts. Tout chiffre cité porte la date de son run.
 
 **Contenu.** Module : une rubrique ou un canal. Le ton et le positionnement vont dans
 `CLAUDE.md`, les angles abandonnés dans `archives/`.
+
+**Jeu.** Module : un système de jeu (combat, inventaire, interface, IA) ou une scène majeure, pas
+un dossier d'assets. Le bloc déclare la version exacte du moteur (`ProjectSettings/ProjectVersion.txt`,
+`project.godot`, le `.uproject`) et la commande de build sans éditeur (Unity en `-batchmode`,
+Godot en `--headless --export-release`, Unreal par `RunUAT BuildCookRun`). Les assets binaires
+sont hors budget et hors relecture : la carte donne leurs dossiers, le pipeline d'import et ce que
+`.gitattributes` met en LFS. Les scènes et prefabs sont du texte généré par l'éditeur : un piège
+classique, à écrire dans la carte, est de les éditer à la main l'éditeur ouvert. Les caches du
+moteur (`Library/`, `Temp/`, `Intermediate/`, `DerivedDataCache/`, `.godot/`) ne sont jamais du
+contexte.
+
+**Mobile.** Module : un écran ou une fonctionnalité, rarement une plateforme. La carte sépare le
+code partagé de ce qui vit sous `android/` et `ios/`. Le bloc déclare les versions minimales de
+SDK et la commande de build de chaque plateforme. Certificats, profils de provisioning et
+keystores ne vivent jamais dans le dépôt : la carte donne leur emplacement.
+
+**Desktop.** Module : un processus (principal et rendu chez Electron, cœur Rust et vue web chez
+Tauri) ou une fenêtre. La carte nomme la frontière entre les deux et ce qui la traverse (IPC,
+commandes). La signature de code et la mise à jour automatique sont des procédures, elles vont
+dans `docs/`.
 
 **Monorepo.** Chaque package équipé garde son kit, la racine pointe sans recopier. Le bloc liste
 les packages et les zones. Voir `ZONES.md`.
